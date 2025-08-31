@@ -19,11 +19,11 @@ class RandomProjectionLSH:
 
         Args:
             n_hash_tables: The number of hash tables. This parameter corresponds to an OR-amplification
-                           of the original family. A higher value increases the probability of
+                           of the locality-sensitive family. A higher value increases the probability of
                            finding a candidate neighbor. Corresponds to 'b' in the amplified probability
                            (1 - (1 - p^r)^b).
             n_projections: The number of random hyperplanes (hash functions) per hash table. This parameter
-                           corresponds to an AND amplification of the original family. A higher value
+                           corresponds to an AND amplification of the locality-sensitive family. A higher value
                            decreases the probability of finding a candidate neighbor. Corresponds to 'r'
                            in the amplified probability (1 - (1 - p^r)^b).
             index_only: If enabled, only store the LSH index and not the input vectors. The subsequent LSH
