@@ -138,6 +138,18 @@ class RandomProjectionLSHModel:
         self._P = P
         self._X = X
 
+    @property
+    def n_hash_tables(self):
+        return self._n_hash_tables
+
+    @property
+    def n_projections(self):
+        return self._n_projections
+
+    @property
+    def index_only(self):
+        return self._X is not None
+
     def _hash(self, Q: np.ndarray, P: np.ndarray) -> np.ndarray:
         """Hash the query matrix Q using the matrix of normal unit vectors P."""
         return (Q @ P.T > 0).astype(int)
