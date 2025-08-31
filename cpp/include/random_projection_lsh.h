@@ -4,6 +4,7 @@
 #include <Eigen/Dense>
 #include <memory>
 #include <optional>
+#include <random>
 #include <unordered_map>
 #include <vector>
 
@@ -29,13 +30,16 @@ public:
      * amplified probability (1 - (1 - p^r)^b).
      * @param index_only If enabled, only store the LSH index and not the input vectors. The
      * subsequent LSH model will return the vector indices in the original dataset rather than the
-     * vectors themselves.
+     * vectors themselves. Enabled by default.
+     * @param seed Optional seed used to generate random projections, default is None.
      */
-    RandomProjectionLSH(int n_hash_tables, int n_projections, bool index_only = true);
+    RandomProjectionLSH(int n_hash_tables, int n_projections, bool index_only = true,
+                        unsigned int seed = std::random_device{}());
 
-    int get_n_hash_tables() const { return n_hash_tables_; }
-    int get_n_projections() const { return n_projections_; }
-    int get_index_only() const { return index_only_; }
+    int get_n_hash_tables() const { return n_hash_tables; }
+    int get_n_projections() const { return n_projections; }
+    int get_index_only() const { return index_only; }
+    unsigned int get_seed() const { return seed; }
 
     /**
      * @brief Fit the RandomProjectionLSH model.
@@ -45,10 +49,13 @@ public:
     std::unique_ptr<RandomProjectionLSHModel> fit(const MatrixXd& X);
 
 private:
-    int n_hash_tables_;
-    int n_projections_;
-    int n_hash_;
-    bool index_only_;
+    int n_hash_tables;
+    int n_projections;
+    int n_hash;
+    bool index_only;
+    unsigned int seed;
+    std::mt19937 rng;
+    std::normal_distribution<double> normal_dist;
 
     /**
      * @brief Sample n_hash random unit vectors from a d-dimensional sphere.
@@ -91,12 +98,12 @@ public:
      */
     RandomProjectionLSHModel(
         int n_hash_tables, int n_projections,
-        std::vector<std::unordered_map<std::vector<int>, std::vector<int>, VectorHasher>> index, MatrixXd P,
-        std::optional<MatrixXd> X = std::nullopt);
+        std::vector<std::unordered_map<std::vector<int>, std::vector<int>, VectorHasher>> index,
+        MatrixXd P, std::optional<MatrixXd> X = std::nullopt);
 
-    int get_n_hash_tables() const { return n_hash_tables_; }
-    int get_n_projections() const { return n_projections_; }
-    int get_index_only() const { return X_.has_value(); }
+    int get_n_hash_tables() const { return n_hash_tables; }
+    int get_n_projections() const { return n_projections; }
+    int get_index_only() const { return X.has_value(); }
 
     /**
      * @brief Query the RandomProjectionLSHModel.
@@ -116,11 +123,11 @@ public:
     static std::unique_ptr<RandomProjectionLSHModel> load(const std::string& save_dir);
 
 private:
-    int n_hash_tables_;
-    int n_projections_;
-    std::vector<std::unordered_map<std::vector<int>, std::vector<int>, VectorHasher>> index_;
-    MatrixXd P_;
-    std::optional<MatrixXd> X_;
+    int n_hash_tables;
+    int n_projections;
+    std::vector<std::unordered_map<std::vector<int>, std::vector<int>, VectorHasher>> index;
+    MatrixXd P;
+    std::optional<MatrixXd> X;
 
     /**
      * @brief Hash the query matrix Q using the matrix of normal unit vectors P.
