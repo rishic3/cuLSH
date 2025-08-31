@@ -12,7 +12,11 @@ class RandomProjectionLSH:
     """
 
     def __init__(
-        self, n_hash_tables: int, n_projections: int, index_only: Optional[bool] = True
+        self,
+        n_hash_tables: int,
+        n_projections: int,
+        index_only: Optional[bool] = True,
+        seed: Optional[int] = None,
     ):
         """
         Initialize the RandomProjectionLSH class.
@@ -28,13 +32,15 @@ class RandomProjectionLSH:
                            in the amplified probability (1 - (1 - p^r)^b).
             index_only: If enabled, only store the LSH index and not the input vectors. The subsequent LSH
                         model will return the vector indices in the original dataset rather than the vectors
-                        themselves.
+                        themselves. Enabled by default.
+            seed: Optional seed used to generate random projections, default is None.
 
         """
         self._n_hash_tables = n_hash_tables
         self._n_projections = n_projections
         self._n_hash = n_hash_tables * n_projections
         self._index_only = index_only
+        self._seed = seed
 
     @property
     def n_hash_tables(self):
@@ -48,6 +54,10 @@ class RandomProjectionLSH:
     def index_only(self):
         return self._index_only
 
+    @property
+    def seed(self):
+        return self._seed
+
     def _generate_random_projections(self, n_hash: int, d: int) -> np.ndarray:
         """
         Sample n_hash random unit vectors from a d-dimensional sphere.
@@ -58,6 +68,9 @@ class RandomProjectionLSH:
         Returns:
             np.ndarray: n_hash x d matrix of random unit vectors
         """
+        if self._seed is not None:
+            np.random.seed(self._seed)
+
         random_vecs = np.random.randn(n_hash, d)
         norms = np.linalg.norm(random_vecs, axis=1, keepdims=True)
         return random_vecs / norms
@@ -194,6 +207,8 @@ class RandomProjectionLSHModel:
 
     def save(self, save_dir: str):
         """Write the model to save dir."""
+        os.makedirs(save_dir, exist_ok=True)
+
         arrs_to_save = {"P": self._P}
         if self._X is not None:
             arrs_to_save["X"] = self._X
@@ -220,7 +235,7 @@ class RandomProjectionLSHModel:
             X = data.get("X")
 
         attr_path = os.path.join(save_dir, "attributes.pkl")
-        with open(attr_path, "wb") as f:
+        with open(attr_path, "rb") as f:
             attrs = pickle.load(f)
 
         return cls(
