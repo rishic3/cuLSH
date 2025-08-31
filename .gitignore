@@ -1,0 +1,81 @@
+# Build directories
+build/
+dist/
+*.egg-info/
+
+# Compiled files
+*.o
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+*.out
+
+# Test outputs
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Documentation builds
+docs/_build/
+docs/.doctrees/
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# CUDA build artifacts
+*.fatbin
+*.ptx
+*.cubin
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Data files (optional, uncomment if you don't want to track data)
+# data/
+# *.csv
+# *.npy
+# *.npz
+
+# Benchmark results
+benchmarks/results/
+*.png
+*.pdf
+
+# Temporary files
+tmp/
+temp/
+
+data/
+.metals
