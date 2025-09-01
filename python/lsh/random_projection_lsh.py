@@ -1,9 +1,16 @@
+import logging
 import os
 import pickle
+import time
 from collections import defaultdict
 from typing import Optional
 
 import numpy as np
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 
 class RandomProjectionLSH:
@@ -96,6 +103,7 @@ class RandomProjectionLSH:
         Returns:
             RandomProjectionLSHModel: the fitted model
         """
+        start_time = time.time()
         d = X.shape[1]
         P = self._generate_random_projections(self._n_hash, d)
         H_x = self._hash(X, P)
@@ -114,6 +122,9 @@ class RandomProjectionLSH:
 
                 # convert signature to hashable type (tuple)
                 index[j][tuple(table_signature)].append(i)
+
+        end_time = time.time()
+        logger.info("Fit completed in %s seconds", round(end_time - start_time, 2))
 
         if self._index_only:
             return RandomProjectionLSHModel(
@@ -179,6 +190,7 @@ class RandomProjectionLSHModel:
             or
             list[list[np.ndarray]]: list of candidate neighbors for each query if index_only is disabled
         """
+        start_time = time.time()
         index = self._index
 
         H_q = self._hash(Q, self._P)
@@ -198,10 +210,16 @@ class RandomProjectionLSHModel:
                 if table_candidates:
                     q_candidates.update(table_candidates)
 
-            if self._X is not None:
-                all_candidates.append([self._X[i] for i in q_candidates])
+            if q_candidates:
+                if self._X is not None:
+                    all_candidates.append([self._X[i] for i in list(q_candidates)])
+                else:
+                    all_candidates.append(list(q_candidates))
             else:
-                all_candidates.append(list(q_candidates))
+                all_candidates.append([])
+
+        end_time = time.time()
+        logger.info("Query completed in %s seconds", round(end_time - start_time, 2))
 
         return all_candidates
 
@@ -225,6 +243,8 @@ class RandomProjectionLSHModel:
 
         with open(attr_path, "wb") as f:
             pickle.dump(attrs, f)
+
+        logger.info("Model saved to %s", save_dir)
 
     @classmethod
     def load(cls, save_dir: str):
