@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+
 from lsh import RandomProjectionLSH
 
 
@@ -38,10 +39,10 @@ def run_benchmark():
     parser = argparse.ArgumentParser(
         description="Test RandomProjection LSH on SIFT dataset"
     )
+    parser.add_argument("-d", "--data-dir", type=str)
     parser.add_argument("-nh", "--n-hash-tables", type=int, default=16)
     parser.add_argument("-np", "--n-projections", type=int, default=4)
     parser.add_argument("-s", "--seed", type=int, default=None)
-    parser.add_argument("-d", "--data-dir", type=str, default="data/sift")
     parser.add_argument("-nq", "--num-queries", type=int, default=100)
     parser.add_argument("-sd", "--save-dir", type=str, default=None)
     args = parser.parse_args()

@@ -9,6 +9,7 @@
 #include <vector>
 
 using namespace Eigen;
+using namespace std;
 
 class RandomProjectionLSHModel;
 
@@ -34,7 +35,7 @@ public:
      * @param seed Optional seed used to generate random projections, default is None.
      */
     RandomProjectionLSH(int n_hash_tables, int n_projections, bool index_only = true,
-                        unsigned int seed = std::random_device{}());
+                        unsigned int seed = random_device{}());
 
     int get_n_hash_tables() const { return n_hash_tables; }
     int get_n_projections() const { return n_projections; }
@@ -46,7 +47,7 @@ public:
      * @param X The input vectors.
      * @return The fitted model.
      */
-    std::unique_ptr<RandomProjectionLSHModel> fit(const MatrixXd& X);
+    unique_ptr<RandomProjectionLSHModel> fit(const MatrixXd& X);
 
 private:
     int n_hash_tables;
@@ -54,8 +55,8 @@ private:
     int n_hash;
     bool index_only;
     unsigned int seed;
-    std::mt19937 rng;
-    std::normal_distribution<double> normal_dist;
+    mt19937 rng;
+    normal_distribution<double> normal_dist;
 
     /**
      * @brief Sample n_hash random unit vectors from a d-dimensional sphere.
@@ -79,7 +80,7 @@ private:
  * @return The hash of the vector.
  */
 struct VectorHasher {
-    std::size_t operator()(const std::vector<int>& vec) const;
+    size_t operator()(const VectorXi& vec) const;
 };
 
 /**
@@ -98,8 +99,8 @@ public:
      */
     RandomProjectionLSHModel(
         int n_hash_tables, int n_projections,
-        std::vector<std::unordered_map<std::vector<int>, std::vector<int>, VectorHasher>> index,
-        MatrixXd P, std::optional<MatrixXd> X = std::nullopt);
+        vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index, MatrixXd P,
+        optional<MatrixXd> X = nullopt);
 
     int get_n_hash_tables() const { return n_hash_tables; }
     int get_n_projections() const { return n_projections; }
@@ -115,19 +116,19 @@ public:
      * @brief Save the RandomProjectionLSHModel to a directory.
      * @param save_dir The directory to save the model.
      */
-    void save(const std::string& save_dir);
+    void save(const string& save_dir);
     /**
      * @brief Load the RandomProjectionLSHModel from a directory.
      * @param save_dir The directory to load the model.
      */
-    static std::unique_ptr<RandomProjectionLSHModel> load(const std::string& save_dir);
+    static unique_ptr<RandomProjectionLSHModel> load(const string& save_dir);
 
 private:
     int n_hash_tables;
     int n_projections;
-    std::vector<std::unordered_map<std::vector<int>, std::vector<int>, VectorHasher>> index;
+    vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index;
     MatrixXd P;
-    std::optional<MatrixXd> X;
+    optional<MatrixXd> X;
 
     /**
      * @brief Hash the query matrix Q using the matrix of normal unit vectors P.
