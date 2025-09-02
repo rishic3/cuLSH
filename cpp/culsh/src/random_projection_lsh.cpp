@@ -5,6 +5,7 @@
 #include <optional>
 #include <random>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 using namespace Eigen;
@@ -24,10 +25,15 @@ size_t VectorHasher::operator()(const VectorXi& vec) const {
 
 // ================== RandomProjectionLSH ==================
 
-RandomProjectionLSH::RandomProjectionLSH(int n_hash_tables, int n_projections, bool index_only,
+RandomProjectionLSH::RandomProjectionLSH(int n_hash_tables, int n_projections, bool store_data,
                                          unsigned int seed)
     : n_hash_tables(n_hash_tables), n_projections(n_projections),
-      n_hash(n_hash_tables * n_projections), index_only(index_only), seed(seed), rng(seed),
+      n_hash(n_hash_tables * n_projections), store_data(store_data), seed(seed), rng(seed),
+      normal_dist(0.0, 1.0) {}
+
+RandomProjectionLSH::RandomProjectionLSH(int n_hash_tables, int n_projections, unsigned int seed)
+    : n_hash_tables(n_hash_tables), n_projections(n_projections),
+      n_hash(n_hash_tables * n_projections), store_data(false), seed(seed), rng(seed),
       normal_dist(0.0, 1.0) {}
 
 MatrixXd RandomProjectionLSH::generate_random_projections(int n_hash, int d) {
@@ -67,19 +73,19 @@ unique_ptr<RandomProjectionLSHModel> RandomProjectionLSH::fit(const MatrixXd& X)
             VectorXi table_signature = signature(seqN(table_start, n_projections));
 
             auto& table_map = index[j];
-            if (table_map.find(table_signature) == table_map.end()) {
+            auto it = table_map.find(table_signature);
+            if (it == table_map.end()) {
                 table_map.insert({table_signature, {i}});
             } else {
-                table_map.at(table_signature).push_back(i);
+                it->second.push_back(i);
             }
         }
     }
 
-    if (index_only) {
-        return make_unique<RandomProjectionLSHModel>(n_hash_tables, n_projections, index, P);
+    if (store_data) {
+        return make_unique<RandomProjectionLSHModel>(n_hash_tables, n_projections, index, P, X);
     } else {
-        return make_unique<RandomProjectionLSHModel>(n_hash_tables, n_projections, index, P,
-                                                          X);
+        return make_unique<RandomProjectionLSHModel>(n_hash_tables, n_projections, index, P);
     }
 }
 
@@ -97,8 +103,53 @@ MatrixXi RandomProjectionLSHModel::hash(const MatrixXd& Q, const MatrixXd& P) {
     return prod.array().sign().cast<int>();
 }
 
-MatrixXi RandomProjectionLSHModel::query(const MatrixXd& Q) {
-    // todo
+template<typename ResultType>
+vector<vector<ResultType>> RandomProjectionLSHModel::query_impl(const MatrixXd& Q) {
+    MatrixXi H_q = hash(Q, P);
+    vector<vector<ResultType>> all_candidates(Q.rows());
+
+    for (int i = 0; i < H_q.rows(); ++i) {
+        VectorXi q_signature = H_q.row(i);
+        unordered_set<int> q_candidates;
+
+        // for each hash table, retrieve candidates that hashed to that table from index
+        for (int j = 0; j < n_hash_tables; ++j) {
+            int table_start = j * n_projections;
+            VectorXi q_table_signature = q_signature(seqN(table_start, n_projections));
+
+            // get candidates from hash table j
+            auto& table_map = index[j];
+            auto it = table_map.find(q_table_signature);
+            if (it != table_map.end()) {
+                const vector<int>& table_candidates = it->second;
+                for (int candidate : table_candidates) {
+                    q_candidates.insert(candidate);
+                }
+            }
+        }
+
+        all_candidates.reserve(q_candidates.size());
+        if constexpr (is_same_v<ResultType, int>) {
+            // return vector of indices
+            all_candidates[i].assign(q_candidates.begin(), q_candidates.end());
+        } else {
+            for (int candidate_idx : q_candidates) {
+                all_candidates[i].push_back(X.value().row(candidate_idx));
+            }
+        }
+    }
+    return all_candidates;
+}
+
+vector<vector<int>> RandomProjectionLSHModel::query_indices(const MatrixXd& Q) {
+    return query_impl<int>(Q);
+}
+
+vector<vector<VectorXd>> RandomProjectionLSHModel::query_vectors(const MatrixXd& Q) {
+    if (!X.has_value()) {
+        throw runtime_error("Input data X was not stored during model creation via store_data=True. Use query_indices().");
+    }
+    return query_impl<VectorXd>(Q);
 }
 
 void RandomProjectionLSHModel::save(const string& save_dir) {

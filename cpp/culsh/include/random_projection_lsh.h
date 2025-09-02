@@ -29,17 +29,25 @@ public:
      * parameter corresponds to an AND amplification of the locality-sensitive family. A higher
      * value decreases the probability of finding a candidate neighbor. Corresponds to 'r' in the
      * amplified probability (1 - (1 - p^r)^b).
-     * @param index_only If enabled, only store the LSH index and not the input vectors. The
-     * subsequent LSH model will return the vector indices in the original dataset rather than the
-     * vectors themselves. Enabled by default.
+     * @param store_data If enabled, store the input vectors in the resultant model. The
+     * subsequent LSH model will return the vectors in the original dataset rather than just
+     * the vector indices. Disabled by default.
      * @param seed Optional seed used to generate random projections, default is None.
      */
-    RandomProjectionLSH(int n_hash_tables, int n_projections, bool index_only = true,
+    RandomProjectionLSH(int n_hash_tables, int n_projections, bool store_data = false,
                         unsigned int seed = random_device{}());
+    
+    /**
+     * @brief Initialize the RandomProjectionLSH class.
+     * @param n_hash_tables The number of hash tables.
+     * @param n_projections The number of random hyperplanes per hash table.
+     * @param seed Custom seed for random projections.
+     */
+    RandomProjectionLSH(int n_hash_tables, int n_projections, unsigned int seed);
 
     int get_n_hash_tables() const { return n_hash_tables; }
     int get_n_projections() const { return n_projections; }
-    int get_index_only() const { return index_only; }
+    int get_store_data() const { return store_data; }
     unsigned int get_seed() const { return seed; }
 
     /**
@@ -53,7 +61,7 @@ private:
     int n_hash_tables;
     int n_projections;
     int n_hash;
-    bool index_only;
+    bool store_data;
     unsigned int seed;
     mt19937 rng;
     normal_distribution<double> normal_dist;
@@ -75,7 +83,7 @@ private:
 };
 
 /**
- * @brief Hash a vector of integers.
+ * @brief Hash function for Eigen::VectorXi.
  * @param vec The vector of integers to hash.
  * @return The hash of the vector.
  */
@@ -95,7 +103,7 @@ public:
      * @param n_projections The number of random hyperplanes (hash functions) per hash table.
      * @param index The index of the input vectors.
      * @param P The n_hash x d matrix of normal unit vectors.
-     * @param X The input vectors if index_only is disabled.
+     * @param X The input vectors if store_data is disabled.
      */
     RandomProjectionLSHModel(
         int n_hash_tables, int n_projections,
@@ -104,14 +112,23 @@ public:
 
     int get_n_hash_tables() const { return n_hash_tables; }
     int get_n_projections() const { return n_projections; }
-    int get_index_only() const { return X.has_value(); }
+    int get_store_data() const { return X.has_value(); }
 
     /**
-     * @brief Query the RandomProjectionLSHModel.
+     * @brief Query the RandomProjectionLSHModel for candidate vector indices.
      * @param Q The m x d matrix of query vectors.
-     * @return The m x n_hash matrix of signature bit vectors.
+     * @return Vector of candidate neighbor indices for each query.
      */
-    MatrixXi query(const MatrixXd& Q);
+    vector<vector<int>> query_indices(const MatrixXd& Q);
+
+    /**
+     * @brief Query the RandomProjectionLSHModel for candidate vectors.
+     * @param Q The m x d matrix of query vectors.
+     * @return Vector of candidate neighbor vectors for each query.
+     * @throws runtime_error if X was not stored during model creation (store_data=False).
+     */
+    vector<vector<VectorXd>> query_vectors(const MatrixXd& Q);
+
     /**
      * @brief Save the RandomProjectionLSHModel to a directory.
      * @param save_dir The directory to save the model.
@@ -137,6 +154,15 @@ private:
      * @return The m x n_hash matrix of signature bit vectors.
      */
     MatrixXi hash(const MatrixXd& Q, const MatrixXd& P);
+    
+    /**
+     * @brief Template for query methods.
+     * @tparam ResultType Either int for query_indices or VectorXd for query_vectors
+     * @param Q The m x d matrix of query vectors.
+     * @return Vector of candidate neighbors for each query.
+     */
+    template<typename ResultType>
+    vector<vector<ResultType>> query_impl(const MatrixXd& Q);
 };
 
 #endif

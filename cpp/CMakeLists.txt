@@ -8,19 +8,19 @@ set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 set(EIGEN_DIR "${THIRD_PARTY_DIR}/eigen")
 
 if(NOT EXISTS "${EIGEN_DIR}")
-    message(WARNING "Eigen not found at ${EIGEN_DIR}. Run 'make install-deps' first.")
+    message(WARNING "Eigen not found at ${EIGEN_DIR}. Run 'install-deps' first.")
 endif()
 
 include_directories(${EIGEN_DIR})
 
-include_directories(include)
+include_directories(culsh/include)
 
 add_library(culsh_lib 
-    src/random_projection_lsh.cpp
+    culsh/src/random_projection_lsh.cpp
 )
 
 # main
-add_executable(main src/main.cpp)
+add_executable(main culsh/src/main.cpp)
 target_link_libraries(main culsh_lib)
 
 # benchmarks
@@ -36,7 +36,6 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# Custom targets for convenience (like your Makefile)
 add_custom_target(install-deps
     COMMAND mkdir -p ${THIRD_PARTY_DIR}
     COMMAND cd ${THIRD_PARTY_DIR} && 
@@ -45,18 +44,4 @@ add_custom_target(install-deps
             mv eigen-3.4.0 eigen
     COMMENT "Downloading and installing Eigen 3.4.0..."
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-add_custom_target(run-main
-    COMMAND main
-    DEPENDS main
-    COMMENT "Running main executable..."
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
-
-add_custom_target(run-bench
-    COMMAND bench_lsh
-    DEPENDS bench_lsh
-    COMMENT "Running benchmark..."
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
