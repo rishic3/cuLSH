@@ -22,7 +22,7 @@ class RandomProjectionLSH:
         self,
         n_hash_tables: int,
         n_projections: int,
-        index_only: Optional[bool] = True,
+        store_data: Optional[bool] = False,
         seed: Optional[int] = None,
     ):
         """
@@ -37,16 +37,16 @@ class RandomProjectionLSH:
                            corresponds to an AND amplification of the locality-sensitive family. A higher value
                            decreases the probability of finding a candidate neighbor. Corresponds to 'r'
                            in the amplified probability (1 - (1 - p^r)^b).
-            index_only: If enabled, only store the LSH index and not the input vectors. The subsequent LSH
-                        model will return the vector indices in the original dataset rather than the vectors
-                        themselves. Enabled by default.
+            store_data: If enabled, store the input vectors in the resultant model. The subsequent LSH
+                        model will the vectors in the original dataset rather than just the vector indices.
+                        Disabled by default.
             seed: Optional seed used to generate random projections, default is None.
 
         """
         self._n_hash_tables = n_hash_tables
         self._n_projections = n_projections
         self._n_hash = n_hash_tables * n_projections
-        self._index_only = index_only
+        self._store_data = store_data
         self._seed = seed
 
     @property
@@ -58,8 +58,8 @@ class RandomProjectionLSH:
         return self._n_projections
 
     @property
-    def index_only(self):
-        return self._index_only
+    def store_data(self):
+        return self._store_data
 
     @property
     def seed(self):
@@ -126,13 +126,13 @@ class RandomProjectionLSH:
         end_time = time.time()
         logger.info("Fit completed in %s seconds", round(end_time - start_time, 2))
 
-        if self._index_only:
+        if self._store_data:
             return RandomProjectionLSHModel(
-                self._n_hash_tables, self._n_projections, index, P
+                self._n_hash_tables, self._n_projections, index, P, X
             )
         else:
             return RandomProjectionLSHModel(
-                self._n_hash_tables, self._n_projections, index, P, X
+                self._n_hash_tables, self._n_projections, index, P
             )
 
 
@@ -154,7 +154,7 @@ class RandomProjectionLSHModel:
             index: the index of the input vectors
             P: the n_hash x d matrix of normal unit vectors
             d: the dimensionality of the input vectors
-            X: the input vectors if index_only is disabled
+            X: the input vectors if store_data is disabled
         """
         self._n_hash_tables = n_hash_tables
         self._n_projections = n_projections
@@ -171,7 +171,7 @@ class RandomProjectionLSHModel:
         return self._n_projections
 
     @property
-    def index_only(self):
+    def store_data(self):
         return self._X is not None
 
     def _hash(self, Q: np.ndarray, P: np.ndarray) -> np.ndarray:
@@ -186,9 +186,9 @@ class RandomProjectionLSHModel:
             Q: the m x d query matrix, where each row is a vector
             k: the number of nearest neighbors to find
         Returns:
-            list[list[int]]: list of candidate neighbors for each query
+            list[list[int]]: If store_data=False, list of candidate neighbors indices for each query
             or
-            list[list[np.ndarray]]: list of candidate neighbors for each query if index_only is disabled
+            list[list[np.ndarray]]: list of candidate neighbor vectors for each query
         """
         start_time = time.time()
         index = self._index
@@ -258,10 +258,13 @@ class RandomProjectionLSHModel:
         with open(attr_path, "rb") as f:
             attrs = pickle.load(f)
 
-        return cls(
+        clazz = cls(
             n_hash_tables=attrs["n_hash_tables"],
             n_projections=attrs["n_projections"],
             index=attrs["index"],
             P=P,
             X=X,
         )
+        logger.info("Model loaded from %s", save_dir)
+
+        return clazz
