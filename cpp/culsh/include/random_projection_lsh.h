@@ -2,6 +2,7 @@
 #define RANDOM_PROJECTION_LSH_H
 
 #include <Eigen/Dense>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <random>
@@ -10,6 +11,7 @@
 
 using namespace Eigen;
 using namespace std;
+namespace fs = filesystem;
 
 class RandomProjectionLSHModel;
 
@@ -132,12 +134,12 @@ public:
      * @brief Save the RandomProjectionLSHModel to a directory.
      * @param save_dir The directory to save the model.
      */
-    void save(const string& save_dir);
+    void save(const fs::path& save_dir);
     /**
      * @brief Load the RandomProjectionLSHModel from a directory.
      * @param save_dir The directory to load the model.
      */
-    static unique_ptr<RandomProjectionLSHModel> load(const string& save_dir);
+    static unique_ptr<RandomProjectionLSHModel> load(const fs::path& save_dir);
 
 private:
     int n_hash_tables;
@@ -161,6 +163,34 @@ private:
      * @return Vector of candidate neighbors for each query.
      */
     template <typename ResultType> vector<vector<ResultType>> query_impl(const MatrixXd& Q);
+
+    /**
+     * @brief Helper method to save Eigen::MatrixXd in binary format.
+     * @param mat Matrix to save.
+     * @param file_path File path to save to.
+     */
+    void save_matrix_binary(const MatrixXd& mat, const fs::path& file_path);
+
+    /**
+     * @brief Helper method to load Eigen::MatrixXd from binary format.
+     * @param file_path File path to load from.
+     */
+    MatrixXd load_matrix_binary(const fs::path& file_path);
+
+    /**
+     * @brief Helper method to save index in binary format.
+     * @param index Index to save.
+     * @param file_path File path to save to.
+     */
+    void save_index_binary(const vector<unordered_map<VectorXi, vector<int>, VectorHasher>>& index,
+                           const fs::path& file_path);
+
+    /**
+     * @brief Helper method to load index from binary format.
+     * @param file_path File path to load from.
+     */
+    vector<unordered_map<VectorXi, vector<int>, VectorHasher>>
+    load_index_binary(const fs::path& file_path);
 };
 
 #endif
