@@ -147,7 +147,7 @@ vector<vector<int>> RandomProjectionLSHModel::query_indices(const MatrixXd& Q) {
 
 vector<vector<VectorXd>> RandomProjectionLSHModel::query_vectors(const MatrixXd& Q) {
     if (!X.has_value()) {
-        throw runtime_error("Input data X was not stored during model creation via store_data=True. Use query_indices().");
+        throw runtime_error("Input data X was not stored in the model via store_data=True. Use query_indices() instead.");
     }
     return query_impl<VectorXd>(Q);
 }
