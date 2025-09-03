@@ -95,15 +95,15 @@ RandomProjectionLSHModel::RandomProjectionLSHModel(
     int n_hash_tables, int n_projections,
     vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index, MatrixXd P,
     optional<MatrixXd> X)
-    : n_hash_tables(n_hash_tables), n_projections(n_projections), index(move(index)),
-      P(move(P)), X(move(X)) {}
+    : n_hash_tables(n_hash_tables), n_projections(n_projections), index(move(index)), P(move(P)),
+      X(move(X)) {}
 
 MatrixXi RandomProjectionLSHModel::hash(const MatrixXd& Q, const MatrixXd& P) {
     MatrixXd prod = Q * P.transpose();
     return prod.array().sign().cast<int>();
 }
 
-template<typename ResultType>
+template <typename ResultType>
 vector<vector<ResultType>> RandomProjectionLSHModel::query_impl(const MatrixXd& Q) {
     MatrixXi H_q = hash(Q, P);
     vector<vector<ResultType>> all_candidates(Q.rows());
@@ -147,7 +147,8 @@ vector<vector<int>> RandomProjectionLSHModel::query_indices(const MatrixXd& Q) {
 
 vector<vector<VectorXd>> RandomProjectionLSHModel::query_vectors(const MatrixXd& Q) {
     if (!X.has_value()) {
-        throw runtime_error("Input data X was not stored in the model via store_data=True. Use query_indices() instead.");
+        throw runtime_error("Input data X was not stored in the model via store_data=True. Use "
+                            "query_indices() instead.");
     }
     return query_impl<VectorXd>(Q);
 }

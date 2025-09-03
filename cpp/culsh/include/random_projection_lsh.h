@@ -36,7 +36,7 @@ public:
      */
     RandomProjectionLSH(int n_hash_tables, int n_projections, bool store_data = false,
                         unsigned int seed = random_device{}());
-    
+
     /**
      * @brief Initialize the RandomProjectionLSH class.
      * @param n_hash_tables The number of hash tables.
@@ -105,10 +105,9 @@ public:
      * @param P The n_hash x d matrix of normal unit vectors.
      * @param X The input vectors if store_data is disabled.
      */
-    RandomProjectionLSHModel(
-        int n_hash_tables, int n_projections,
-        vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index, MatrixXd P,
-        optional<MatrixXd> X = nullopt);
+    RandomProjectionLSHModel(int n_hash_tables, int n_projections,
+                             vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index,
+                             MatrixXd P, optional<MatrixXd> X = nullopt);
 
     int get_n_hash_tables() const { return n_hash_tables; }
     int get_n_projections() const { return n_projections; }
@@ -154,15 +153,14 @@ private:
      * @return The m x n_hash matrix of signature bit vectors.
      */
     MatrixXi hash(const MatrixXd& Q, const MatrixXd& P);
-    
+
     /**
      * @brief Template for query methods.
      * @tparam ResultType Either int for query_indices or VectorXd for query_vectors
      * @param Q The m x d matrix of query vectors.
      * @return Vector of candidate neighbors for each query.
      */
-    template<typename ResultType>
-    vector<vector<ResultType>> query_impl(const MatrixXd& Q);
+    template <typename ResultType> vector<vector<ResultType>> query_impl(const MatrixXd& Q);
 };
 
 #endif
