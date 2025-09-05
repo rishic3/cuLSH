@@ -249,6 +249,9 @@ class RandomProjectionLSHModel:
     @classmethod
     def load(cls, save_dir: str):
         """Read the model from save dir."""
+        if not os.path.exists(save_dir) or not os.path.isdir(save_dir):
+            raise FileNotFoundError(f"Directory '{save_dir}' not found.")
+
         npz_path = os.path.join(save_dir, "arrays.npz")
         with np.load(npz_path) as data:
             P = data["P"]
