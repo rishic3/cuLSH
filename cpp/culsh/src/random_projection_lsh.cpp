@@ -79,7 +79,7 @@ unique_ptr<RandomProjectionLSHModel> RandomProjectionLSH::fit(const MatrixXd& X)
             auto& hash_table = index[j];
             auto it = hash_table.find(table_signature);
             if (it == hash_table.end()) {
-                hash_table.insert({table_signature, {i}});
+                hash_table.insert({table_signature, {static_cast<int>(i)}});
             } else {
                 it->second.push_back(i);
             }
@@ -160,6 +160,10 @@ vector<vector<VectorXd>> RandomProjectionLSHModel::query_vectors(const MatrixXd&
 
 void RandomProjectionLSHModel::save_matrix_binary(const MatrixXd& mat, const fs::path& file_path) {
     ofstream file(file_path, ios::binary);
+    if (!file.is_open()) {
+        throw runtime_error("Could not open file '" + file_path.string() + "'");
+    }
+
     MatrixXd::Index n_rows = mat.rows(), n_cols = mat.cols();
 
     // write dimensions
@@ -173,6 +177,10 @@ void RandomProjectionLSHModel::save_matrix_binary(const MatrixXd& mat, const fs:
 
 MatrixXd RandomProjectionLSHModel::load_matrix_binary(const fs::path& file_path) {
     ifstream file(file_path, ios::binary);
+    if (!file.is_open()) {
+        throw runtime_error("Could not open file '" + file_path.string() + "'");
+    }
+
     MatrixXd::Index n_rows = 0, n_cols = 0;
 
     // read dimensions
@@ -189,11 +197,15 @@ void RandomProjectionLSHModel::save_index_binary(
     const vector<unordered_map<VectorXi, vector<int>, VectorHasher>>& index,
     const fs::path& file_path) {
     ofstream file(file_path, ios::binary);
-    ssize_t n_hash_tables = index.size();
+    if (!file.is_open()) {
+        throw runtime_error("Could not open file '" + file_path.string() + "'");
+    }
+
+    size_t n_hash_tables = index.size();
     file.write(reinterpret_cast<const char*>(&n_hash_tables), sizeof(n_hash_tables));
 
     for (const auto& hash_table : index) {
-        ssize_t table_size = hash_table.size();
+        size_t table_size = hash_table.size();
         file.write(reinterpret_cast<const char*>(&table_size), sizeof(table_size));
 
         for (const auto& [signature, candidate_indices] : hash_table) {
@@ -204,7 +216,7 @@ void RandomProjectionLSHModel::save_index_binary(
                        n_cols * sizeof(VectorXi::Scalar));
 
             // write indices
-            ssize_t n_candidates = candidate_indices.size();
+            size_t n_candidates = candidate_indices.size();
             file.write(reinterpret_cast<const char*>(&n_candidates), sizeof(n_candidates));
             file.write(reinterpret_cast<const char*>(candidate_indices.data()),
                        n_candidates * sizeof(int));
@@ -215,16 +227,20 @@ void RandomProjectionLSHModel::save_index_binary(
 vector<unordered_map<VectorXi, vector<int>, VectorHasher>>
 RandomProjectionLSHModel::load_index_binary(const fs::path& file_path) {
     ifstream file(file_path, ios::binary);
-    ssize_t n_hash_tables = 0;
+    if (!file.is_open()) {
+        throw runtime_error("Could not open file '" + file_path.string() + "'");
+    }
+
+    size_t n_hash_tables = 0;
     file.read(reinterpret_cast<char*>(&n_hash_tables), sizeof(n_hash_tables));
 
     vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index(n_hash_tables);
 
-    for (ssize_t i = 0; i < n_hash_tables; ++i) {
-        ssize_t table_size = 0;
+    for (size_t i = 0; i < n_hash_tables; ++i) {
+        size_t table_size = 0;
         file.read(reinterpret_cast<char*>(&table_size), sizeof(table_size));
 
-        for (ssize_t j = 0; j < table_size; ++j) {
+        for (size_t j = 0; j < table_size; ++j) {
             // read signature
             VectorXi::Index n_cols = 0;
             file.read(reinterpret_cast<char*>(&n_cols), sizeof(n_cols));
@@ -232,7 +248,7 @@ RandomProjectionLSHModel::load_index_binary(const fs::path& file_path) {
             file.read(reinterpret_cast<char*>(signature.data()), n_cols * sizeof(VectorXi::Scalar));
 
             // read indices
-            ssize_t n_candidates = 0;
+            size_t n_candidates = 0;
             file.read(reinterpret_cast<char*>(&n_candidates), sizeof(n_candidates));
             vector<int> candidate_indices(n_candidates);
             file.read(reinterpret_cast<char*>(candidate_indices.data()),
@@ -249,15 +265,47 @@ void RandomProjectionLSHModel::save(const fs::path& save_dir) {
         fs::create_directory(save_dir);
     }
 
-    // save matrix attributes
+    // write matrix attributes
     save_matrix_binary(P, save_dir / "P.bin");
     if (X.has_value()) {
         save_matrix_binary(X.value(), save_dir / "X.bin");
     }
 
-    // save index
+    // write index
+    save_index_binary(index, save_dir / "index.bin");
+
+    // write params
+    ofstream attributes(save_dir / "attributes.txt");
+    attributes << n_hash_tables << "\n" << n_projections << endl;
+
+    clog << "Model saved to " << save_dir << endl;
 }
 
 unique_ptr<RandomProjectionLSHModel> RandomProjectionLSHModel::load(const fs::path& save_dir) {
-    // todo
+    if (!fs::exists(save_dir) || !fs::is_directory(save_dir)) {
+        throw runtime_error("Directory '" + save_dir.string() + "' not found");
+    }
+
+    // read matrix attributes
+    MatrixXd P = load_matrix_binary(save_dir / "P.bin");
+    optional<MatrixXd> X;
+    if (fs::exists(save_dir / "X.bin")) {
+        X = load_matrix_binary(save_dir / "X.bin");
+    }
+
+    // read index
+    vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index =
+        load_index_binary(save_dir / "index.bin");
+
+    // read params
+    fs::path attributes_path = save_dir / "attributes.txt";
+    ifstream attributes(attributes_path);
+    if (!attributes.is_open()) {
+        throw runtime_error("Could not open file '" + attributes_path.string() + "'");
+    }
+
+    int n_hash_tables, n_projections;
+    attributes >> n_hash_tables >> n_projections;
+
+    return make_unique<RandomProjectionLSHModel>(n_hash_tables, n_projections, index, P, X);
 }

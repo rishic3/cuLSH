@@ -169,27 +169,29 @@ private:
      * @param mat Matrix to save.
      * @param file_path File path to save to.
      */
-    void save_matrix_binary(const MatrixXd& mat, const fs::path& file_path);
+    static void save_matrix_binary(const MatrixXd& mat, const fs::path& file_path);
 
     /**
      * @brief Helper method to load Eigen::MatrixXd from binary format.
      * @param file_path File path to load from.
      */
-    MatrixXd load_matrix_binary(const fs::path& file_path);
+    static MatrixXd load_matrix_binary(const fs::path& file_path);
 
     /**
      * @brief Helper method to save index in binary format.
      * @param index Index to save.
      * @param file_path File path to save to.
      */
-    void save_index_binary(const vector<unordered_map<VectorXi, vector<int>, VectorHasher>>& index,
-                           const fs::path& file_path);
+    static void
+    save_index_binary(const vector<unordered_map<VectorXi, vector<int>, VectorHasher>>& index,
+                      const fs::path& file_path);
 
     /**
      * @brief Helper method to load index from binary format.
      * @param file_path File path to load from.
+     * @throws runtime_error if invalid file_path is provided.
      */
-    vector<unordered_map<VectorXi, vector<int>, VectorHasher>>
+    static vector<unordered_map<VectorXi, vector<int>, VectorHasher>>
     load_index_binary(const fs::path& file_path);
 };
 
