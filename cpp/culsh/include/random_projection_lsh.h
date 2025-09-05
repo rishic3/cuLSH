@@ -3,7 +3,6 @@
 
 #include <Eigen/Dense>
 #include <filesystem>
-#include <memory>
 #include <optional>
 #include <random>
 #include <unordered_map>
@@ -57,7 +56,7 @@ public:
      * @param X The input vectors.
      * @return The fitted model.
      */
-    unique_ptr<RandomProjectionLSHModel> fit(const MatrixXd& X);
+    RandomProjectionLSHModel fit(const MatrixXd& X);
 
 private:
     int n_hash_tables;
@@ -139,7 +138,7 @@ public:
      * @brief Load the RandomProjectionLSHModel from a directory.
      * @param save_dir The directory to load the model.
      */
-    static unique_ptr<RandomProjectionLSHModel> load(const fs::path& save_dir);
+    static RandomProjectionLSHModel load(const fs::path& save_dir);
 
 private:
     int n_hash_tables;

@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <memory>
 #include <optional>
 #include <random>
 #include <unordered_map>
@@ -60,7 +59,7 @@ MatrixXi RandomProjectionLSH::hash(const MatrixXd& X, const MatrixXd& P) {
     return prod.array().sign().cast<int>();
 }
 
-unique_ptr<RandomProjectionLSHModel> RandomProjectionLSH::fit(const MatrixXd& X) {
+RandomProjectionLSHModel RandomProjectionLSH::fit(const MatrixXd& X) {
     MatrixXd::Index d = X.cols();
     MatrixXd P = generate_random_projections(n_hash, d);
     MatrixXi H_x = hash(X, P);
@@ -87,9 +86,9 @@ unique_ptr<RandomProjectionLSHModel> RandomProjectionLSH::fit(const MatrixXd& X)
     }
 
     if (store_data) {
-        return make_unique<RandomProjectionLSHModel>(n_hash_tables, n_projections, index, P, X);
+        return RandomProjectionLSHModel(n_hash_tables, n_projections, index, P, X);
     } else {
-        return make_unique<RandomProjectionLSHModel>(n_hash_tables, n_projections, index, P);
+        return RandomProjectionLSHModel(n_hash_tables, n_projections, index, P);
     }
 }
 
@@ -281,7 +280,7 @@ void RandomProjectionLSHModel::save(const fs::path& save_dir) {
     clog << "Model saved to " << save_dir << endl;
 }
 
-unique_ptr<RandomProjectionLSHModel> RandomProjectionLSHModel::load(const fs::path& save_dir) {
+RandomProjectionLSHModel RandomProjectionLSHModel::load(const fs::path& save_dir) {
     if (!fs::exists(save_dir) || !fs::is_directory(save_dir)) {
         throw runtime_error("Directory '" + save_dir.string() + "' not found");
     }
@@ -307,5 +306,5 @@ unique_ptr<RandomProjectionLSHModel> RandomProjectionLSHModel::load(const fs::pa
     int n_hash_tables, n_projections;
     attributes >> n_hash_tables >> n_projections;
 
-    return make_unique<RandomProjectionLSHModel>(n_hash_tables, n_projections, index, P, X);
+    return RandomProjectionLSHModel(n_hash_tables, n_projections, index, P, X);
 }
