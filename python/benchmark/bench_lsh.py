@@ -16,7 +16,7 @@ def read_fvecs(fp):
     return a.reshape(-1, d + 1)[:, 1:].copy().view("float32")
 
 
-def get_gt_top_k_indices(q, X, k=1000):
+def get_gt_top_k_indices(q, X, k):
     q_norm = q / np.linalg.norm(q)
     X_norm = X / np.linalg.norm(X, axis=1, keepdims=True)
     cos_sims = np.dot(X_norm, q_norm)
@@ -44,7 +44,7 @@ def run_benchmark():
     parser.add_argument("-np", "--n-projections", type=int, default=4)
     parser.add_argument("-s", "--seed", type=int, default=None)
     parser.add_argument("-nq", "--num-queries", type=int, default=100)
-    parser.add_argument("-sd", "--save-dir", type=str, default=None)
+    parser.add_argument("-o", "--save-dir", type=str, default=None)
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
