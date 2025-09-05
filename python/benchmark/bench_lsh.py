@@ -43,7 +43,7 @@ def run_benchmark():
     parser.add_argument("-nh", "--n-hash-tables", type=int, default=16)
     parser.add_argument("-np", "--n-projections", type=int, default=4)
     parser.add_argument("-s", "--seed", type=int, default=None)
-    parser.add_argument("-nq", "--num-queries", type=int, default=100)
+    parser.add_argument("-nq", "--n-queries", type=int, default=100)
     parser.add_argument("-o", "--save-dir", type=str, default=None)
     args = parser.parse_args()
 
