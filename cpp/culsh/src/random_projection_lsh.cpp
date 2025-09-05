@@ -261,7 +261,7 @@ RandomProjectionLSHModel::load_index_binary(const fs::path& file_path) {
 
 void RandomProjectionLSHModel::save(const fs::path& save_dir) {
     if (!fs::exists(save_dir)) {
-        fs::create_directory(save_dir);
+        fs::create_directories(save_dir);
     }
 
     // write matrix attributes
@@ -274,7 +274,11 @@ void RandomProjectionLSHModel::save(const fs::path& save_dir) {
     save_index_binary(index, save_dir / "index.bin");
 
     // write params
-    ofstream attributes(save_dir / "attributes.txt");
+    fs::path attributes_path = save_dir / "attributes.txt";
+    ofstream attributes(attributes_path);
+    if (!attributes.is_open()) {
+        throw runtime_error("Could not create file '" + attributes_path.string() + "'");
+    }
     attributes << n_hash_tables << "\n" << n_projections << endl;
 
     clog << "Model saved to " << save_dir << endl;
@@ -305,6 +309,8 @@ RandomProjectionLSHModel RandomProjectionLSHModel::load(const fs::path& save_dir
 
     int n_hash_tables, n_projections;
     attributes >> n_hash_tables >> n_projections;
+
+    clog << "Model loaded from " << save_dir << endl;
 
     return RandomProjectionLSHModel(n_hash_tables, n_projections, index, P, X);
 }
