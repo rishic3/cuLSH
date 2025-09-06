@@ -5,8 +5,10 @@
 #include <filesystem>
 #include <fstream>
 #include <getopt.h>
+#include <iomanip>
 #include <iostream>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -217,29 +219,29 @@ int main(int argc, char* argv[]) {
     if (!fs::create_directories("results") && !fs::exists("results")) {
         throw runtime_error("Failed to create results directory");
     }
-    string report_path = "results/report_" +
-                         to_string(chrono::duration_cast<chrono::seconds>(
-                                       chrono::system_clock::now().time_since_epoch())
-                                       .count()) +
-                         ".json";
+    auto now = chrono::system_clock::now();
+    auto time_t = chrono::system_clock::to_time_t(now);
+    stringstream ss;
+    ss << put_time(localtime(&time_t), "%Y%m%d_%H%M%S");
+    string report_path = "results/report_h" + to_string(conf.n_hash_tables) + "_p" + to_string(conf.n_projections) + "_" + ss.str() + ".json";
 
     ofstream report(report_path);
     report << "{\n";
-    report << "  \"params\": {\n";
-    report << "    \"n_hash_tables\": " << conf.n_hash_tables << ",\n";
-    report << "    \"n_projections\": " << conf.n_projections << ",\n";
-    report << "    \"seed\": " << lsh.get_seed() << ",\n";
-    report << "    \"num_queries\": " << conf.n_queries << "\n";
-    report << "  },\n";
-    report << "  \"runtimes\": {\n";
-    report << "    \"fit_time\": " << fit_seconds << ",\n";
-    report << "    \"query_time\": " << query_seconds << "\n";
-    report << "  },\n";
-    report << "  \"first_query_results\": {\n";
-    report << "    \"recall_score\": " << recall_score << ",\n";
-    report << "    \"intersection_size\": " << intersection_size << ",\n";
-    report << "    \"gt_size\": " << gt_size << "\n";
-    report << "  }\n";
+    report << "    \"params\": {\n";
+    report << "        \"n_hash_tables\": " << conf.n_hash_tables << ",\n";
+    report << "        \"n_projections\": " << conf.n_projections << ",\n";
+    report << "        \"seed\": " << lsh.get_seed() << ",\n";
+    report << "        \"num_queries\": " << conf.n_queries << "\n";
+    report << "    },\n";
+    report << "    \"runtimes\": {\n";
+    report << "        \"fit_time\": " << fit_seconds << ",\n";
+    report << "        \"query_time\": " << query_seconds << "\n";
+    report << "    },\n";
+    report << "    \"first_query_results\": {\n";
+    report << "        \"recall_score\": " << recall_score << ",\n";
+    report << "        \"intersection_size\": " << intersection_size << ",\n";
+    report << "        \"gt_size\": " << gt_size << "\n";
+    report << "    }\n";
     report << "}\n";
     report.close();
 

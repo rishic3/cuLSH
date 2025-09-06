@@ -3,7 +3,7 @@
 set -e
 
 BUILD_TYPE=${1:-Release}
-BUILD_DIR="build"
+BUILD_DIR="_build"
 
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
