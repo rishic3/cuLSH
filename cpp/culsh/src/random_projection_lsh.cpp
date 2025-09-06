@@ -14,16 +14,15 @@ using namespace Eigen;
 using namespace std;
 namespace fs = filesystem;
 
-size_t VectorHasher::operator()(const VectorXi& vec) const {
-    // from https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933#72073933
-    size_t seed = vec.size();
-    for (int x : vec) {
-        x = ((x >> 16) ^ x) * 0x45d9f3b;
-        x = ((x >> 16) ^ x) * 0x45d9f3b;
-        x = (x >> 16) ^ x;
-        seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+using IndexType = RandomProjectionLSHModel::IndexType;
+
+vector<int8_t> to_compact_signature(const VectorXi& vec) {
+    vector<int8_t> sig;
+    sig.reserve(vec.size());
+    for (int i = 0; i < vec.size(); ++i) {
+        sig.push_back(vec(i) > 0 ? 1 : 0);
     }
-    return seed;
+    return sig;
 }
 
 // ================== RandomProjectionLSH ==================
@@ -66,7 +65,7 @@ RandomProjectionLSHModel RandomProjectionLSH::fit(const MatrixXd& X) {
 
     // index is a vector of maps for each hash table
     // each map stores (hash table signature -> vector of indices in X)
-    vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index(n_hash_tables);
+    IndexType index(n_hash_tables);
 
     for (MatrixXd::Index i = 0; i < H_x.rows(); ++i) {
         VectorXi signature = H_x.row(i);
@@ -74,14 +73,9 @@ RandomProjectionLSHModel RandomProjectionLSH::fit(const MatrixXd& X) {
         for (int j = 0; j < n_hash_tables; ++j) {
             int table_start = j * n_projections;
             VectorXi table_signature = signature(seqN(table_start, n_projections));
+            vector<int8_t> compact_sig = to_compact_signature(table_signature);
 
-            auto& hash_table = index[j];
-            auto it = hash_table.find(table_signature);
-            if (it == hash_table.end()) {
-                hash_table.insert({table_signature, {static_cast<int>(i)}});
-            } else {
-                it->second.push_back(i);
-            }
+            index[j][compact_sig].push_back(i);
         }
     }
 
@@ -94,10 +88,9 @@ RandomProjectionLSHModel RandomProjectionLSH::fit(const MatrixXd& X) {
 
 // ================== RandomProjectionLSHModel ==================
 
-RandomProjectionLSHModel::RandomProjectionLSHModel(
-    int n_hash_tables, int n_projections,
-    vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index, MatrixXd P,
-    optional<MatrixXd> X)
+RandomProjectionLSHModel::RandomProjectionLSHModel(int n_hash_tables, int n_projections,
+                                                   IndexType index, MatrixXd P,
+                                                   optional<MatrixXd> X)
     : n_hash_tables(n_hash_tables), n_projections(n_projections), index(std::move(index)),
       P(std::move(P)), X(std::move(X)) {}
 
@@ -119,10 +112,11 @@ vector<vector<ResultType>> RandomProjectionLSHModel::query_impl(const MatrixXd& 
         for (int j = 0; j < n_hash_tables; ++j) {
             int table_start = j * n_projections;
             VectorXi q_table_signature = q_signature(seqN(table_start, n_projections));
+            vector<int8_t> q_compact_table_signature = to_compact_signature(q_table_signature);
 
             // get candidates from hash table j
             auto& hash_table = index[j];
-            auto it = hash_table.find(q_table_signature);
+            auto it = hash_table.find(q_compact_table_signature);
             if (it != hash_table.end()) {
                 const vector<int>& table_candidates = it->second;
                 for (int candidate : table_candidates) {
@@ -192,9 +186,8 @@ MatrixXd RandomProjectionLSHModel::load_matrix_binary(const fs::path& file_path)
     return mat;
 }
 
-void RandomProjectionLSHModel::save_index_binary(
-    const vector<unordered_map<VectorXi, vector<int>, VectorHasher>>& index,
-    const fs::path& file_path) {
+void RandomProjectionLSHModel::save_index_binary(const IndexType& index,
+                                                 const fs::path& file_path) {
     ofstream file(file_path, ios::binary);
     if (!file.is_open()) {
         throw runtime_error("Could not open file '" + file_path.string() + "'");
@@ -209,10 +202,9 @@ void RandomProjectionLSHModel::save_index_binary(
 
         for (const auto& [signature, candidate_indices] : hash_table) {
             // write signature
-            VectorXi::Index n_cols = signature.cols();
-            file.write(reinterpret_cast<const char*>(&n_cols), sizeof(n_cols));
-            file.write(reinterpret_cast<const char*>(signature.data()),
-                       n_cols * sizeof(VectorXi::Scalar));
+            size_t sig_size = signature.size();
+            file.write(reinterpret_cast<const char*>(&sig_size), sizeof(sig_size));
+            file.write(reinterpret_cast<const char*>(signature.data()), sig_size);
 
             // write indices
             size_t n_candidates = candidate_indices.size();
@@ -223,8 +215,7 @@ void RandomProjectionLSHModel::save_index_binary(
     }
 }
 
-vector<unordered_map<VectorXi, vector<int>, VectorHasher>>
-RandomProjectionLSHModel::load_index_binary(const fs::path& file_path) {
+IndexType RandomProjectionLSHModel::load_index_binary(const fs::path& file_path) {
     ifstream file(file_path, ios::binary);
     if (!file.is_open()) {
         throw runtime_error("Could not open file '" + file_path.string() + "'");
@@ -233,7 +224,7 @@ RandomProjectionLSHModel::load_index_binary(const fs::path& file_path) {
     size_t n_hash_tables = 0;
     file.read(reinterpret_cast<char*>(&n_hash_tables), sizeof(n_hash_tables));
 
-    vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index(n_hash_tables);
+    IndexType index(n_hash_tables);
 
     for (size_t i = 0; i < n_hash_tables; ++i) {
         size_t table_size = 0;
@@ -241,10 +232,10 @@ RandomProjectionLSHModel::load_index_binary(const fs::path& file_path) {
 
         for (size_t j = 0; j < table_size; ++j) {
             // read signature
-            VectorXi::Index n_cols = 0;
-            file.read(reinterpret_cast<char*>(&n_cols), sizeof(n_cols));
-            VectorXi signature(n_cols);
-            file.read(reinterpret_cast<char*>(signature.data()), n_cols * sizeof(VectorXi::Scalar));
+            size_t sig_size = 0;
+            file.read(reinterpret_cast<char*>(&sig_size), sizeof(sig_size));
+            vector<int8_t> signature(sig_size);
+            file.read(reinterpret_cast<char*>(signature.data()), sig_size);
 
             // read indices
             size_t n_candidates = 0;
@@ -297,8 +288,7 @@ RandomProjectionLSHModel RandomProjectionLSHModel::load(const fs::path& save_dir
     }
 
     // read index
-    vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index =
-        load_index_binary(save_dir / "index.bin");
+    IndexType index = load_index_binary(save_dir / "index.bin");
 
     // read params
     fs::path attributes_path = save_dir / "attributes.txt";

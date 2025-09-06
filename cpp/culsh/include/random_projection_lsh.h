@@ -84,12 +84,15 @@ private:
 };
 
 /**
- * @brief Hash function for Eigen::VectorXi.
+ * @brief Hash function for std::vector<int8_t>.
  * @param vec The vector of integers to hash.
  * @return The hash of the vector.
  */
 struct VectorHasher {
-    size_t operator()(const VectorXi& vec) const;
+    size_t operator()(const vector<int8_t>& vec) const {
+        return hash<string_view>{}(
+            string_view(reinterpret_cast<const char*>(vec.data()), vec.size()));
+    }
 };
 
 /**
@@ -98,6 +101,8 @@ struct VectorHasher {
  */
 class RandomProjectionLSHModel {
 public:
+    using IndexType = vector<unordered_map<vector<int8_t>, vector<int>, VectorHasher>>;
+
     /**
      * @brief Initialize the RandomProjectionLSHModel.
      * @param n_hash_tables The number of hash tables.
@@ -106,9 +111,8 @@ public:
      * @param P The n_hash x d matrix of normal unit vectors.
      * @param X The input vectors if store_data is disabled.
      */
-    RandomProjectionLSHModel(int n_hash_tables, int n_projections,
-                             vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index,
-                             MatrixXd P, optional<MatrixXd> X = nullopt);
+    RandomProjectionLSHModel(int n_hash_tables, int n_projections, IndexType index, MatrixXd P,
+                             optional<MatrixXd> X = nullopt);
 
     int get_n_hash_tables() const { return n_hash_tables; }
     int get_n_projections() const { return n_projections; }
@@ -143,7 +147,7 @@ public:
 private:
     int n_hash_tables;
     int n_projections;
-    vector<unordered_map<VectorXi, vector<int>, VectorHasher>> index;
+    IndexType index;
     MatrixXd P;
     optional<MatrixXd> X;
 
@@ -181,17 +185,14 @@ private:
      * @param index Index to save.
      * @param file_path File path to save to.
      */
-    static void
-    save_index_binary(const vector<unordered_map<VectorXi, vector<int>, VectorHasher>>& index,
-                      const fs::path& file_path);
+    static void save_index_binary(const IndexType& index, const fs::path& file_path);
 
     /**
      * @brief Helper method to load index from binary format.
      * @param file_path File path to load from.
      * @throws runtime_error if invalid file_path is provided.
      */
-    static vector<unordered_map<VectorXi, vector<int>, VectorHasher>>
-    load_index_binary(const fs::path& file_path);
+    static IndexType load_index_binary(const fs::path& file_path);
 };
 
 #endif
