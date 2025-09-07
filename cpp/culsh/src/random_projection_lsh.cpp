@@ -17,6 +17,7 @@ namespace fs = filesystem;
 using IndexType = RandomProjectionLSHModel::IndexType;
 
 vector<int8_t> to_compact_signature(const VectorXi& vec) {
+    // compact representation of signature bit vector for faster hashing
     vector<int8_t> sig;
     sig.reserve(vec.size());
     for (int i = 0; i < vec.size(); ++i) {
