@@ -223,7 +223,8 @@ int main(int argc, char* argv[]) {
     auto time_t = chrono::system_clock::to_time_t(now);
     stringstream ss;
     ss << put_time(localtime(&time_t), "%Y%m%d_%H%M%S");
-    string report_path = "results/report_h" + to_string(conf.n_hash_tables) + "_p" + to_string(conf.n_projections) + "_" + ss.str() + ".json";
+    string report_path = "results/report_h" + to_string(conf.n_hash_tables) + "_p" +
+                         to_string(conf.n_projections) + "_" + ss.str() + ".json";
 
     ofstream report(report_path);
     report << "{\n";

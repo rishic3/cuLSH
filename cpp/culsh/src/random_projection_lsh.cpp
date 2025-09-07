@@ -1,6 +1,7 @@
 #include <random_projection_lsh.h>
 
 #include <Eigen/Dense>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -8,7 +9,6 @@
 #include <random>
 #include <unordered_map>
 #include <vector>
-#include <chrono>
 
 using namespace Eigen;
 using namespace std;
@@ -111,7 +111,7 @@ vector<vector<ResultType>> RandomProjectionLSHModel::query_impl(const MatrixXd& 
 
     MatrixXi H_q = hash(Q, P);
     vector<vector<ResultType>> all_candidates(Q.rows());
-    
+
     // store a bitmask of seen candidates as an alternative to unordered_set. benefit is two-fold:
     // 1) avoid hash overhead of unordered_set.insert() per query, per hash table
     // 2) store q_candidates contiguously to make all_candidates.assign(...) iteration much faster
@@ -151,17 +151,17 @@ vector<vector<ResultType>> RandomProjectionLSHModel::query_impl(const MatrixXd& 
         all_candidates[i].reserve(q_candidates.size());
         if constexpr (is_same_v<ResultType, int>) {
             all_candidates[i].assign(q_candidates.begin(), q_candidates.end());
-        } else {  // is_same_v<ResultType, VectorXd>
+        } else { // is_same_v<ResultType, VectorXd>
             for (int candidate_idx : q_candidates) {
                 all_candidates[i].push_back(X.value().row(candidate_idx));
             }
         }
     }
-    
+
     auto end_time = chrono::high_resolution_clock::now();
     chrono::duration<double> query_time = end_time - start_time;
     clog << "Query completed in " << query_time.count() << " sec" << endl;
-    
+
     return all_candidates;
 }
 
