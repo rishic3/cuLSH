@@ -107,12 +107,13 @@ public:
      * @brief Initialize the RandomProjectionLSHModel.
      * @param n_hash_tables The number of hash tables.
      * @param n_projections The number of random hyperplanes (hash functions) per hash table.
+     * @param n_data_points The number of data points in the original dataset.
      * @param index The index of the input vectors.
      * @param P The n_hash x d matrix of normal unit vectors.
      * @param X The input vectors if store_data is disabled.
      */
-    RandomProjectionLSHModel(int n_hash_tables, int n_projections, IndexType index, MatrixXd P,
-                             optional<MatrixXd> X = nullopt);
+    RandomProjectionLSHModel(int n_hash_tables, int n_projections, size_t n_data_points,
+                             IndexType index, MatrixXd P, optional<MatrixXd> X = nullopt);
 
     int get_n_hash_tables() const { return n_hash_tables; }
     int get_n_projections() const { return n_projections; }
@@ -147,6 +148,7 @@ public:
 private:
     int n_hash_tables;
     int n_projections;
+    size_t n_data_points;
     IndexType index;
     MatrixXd P;
     optional<MatrixXd> X;

@@ -7,8 +7,8 @@
 #include <optional>
 #include <random>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
+#include <chrono>
 
 using namespace Eigen;
 using namespace std;
@@ -59,6 +59,8 @@ MatrixXi RandomProjectionLSH::hash(const MatrixXd& X, const MatrixXd& P) {
 }
 
 RandomProjectionLSHModel RandomProjectionLSH::fit(const MatrixXd& X) {
+    auto start_time = chrono::high_resolution_clock::now();
+
     MatrixXd::Index d = X.cols();
     MatrixXd P = generate_random_projections(n_hash, d);
     MatrixXi H_x = hash(X, P);
@@ -79,20 +81,24 @@ RandomProjectionLSHModel RandomProjectionLSH::fit(const MatrixXd& X) {
         }
     }
 
+    auto end_time = chrono::high_resolution_clock::now();
+    chrono::duration<double> fit_time = end_time - start_time;
+    clog << "Fit completed in " << fit_time.count() << " sec" << endl;
+
     if (store_data) {
-        return RandomProjectionLSHModel(n_hash_tables, n_projections, index, P, X);
+        return RandomProjectionLSHModel(n_hash_tables, n_projections, X.rows(), index, P, X);
     } else {
-        return RandomProjectionLSHModel(n_hash_tables, n_projections, index, P);
+        return RandomProjectionLSHModel(n_hash_tables, n_projections, X.rows(), index, P);
     }
 }
 
 // ================== RandomProjectionLSHModel ==================
 
 RandomProjectionLSHModel::RandomProjectionLSHModel(int n_hash_tables, int n_projections,
-                                                   IndexType index, MatrixXd P,
-                                                   optional<MatrixXd> X)
-    : n_hash_tables(n_hash_tables), n_projections(n_projections), index(std::move(index)),
-      P(std::move(P)), X(std::move(X)) {}
+                                                   size_t n_data_points, IndexType index,
+                                                   MatrixXd P, optional<MatrixXd> X)
+    : n_hash_tables(n_hash_tables), n_projections(n_projections), n_data_points(n_data_points),
+      index(std::move(index)), P(std::move(P)), X(std::move(X)) {}
 
 MatrixXi RandomProjectionLSHModel::hash(const MatrixXd& Q, const MatrixXd& P) {
     MatrixXd prod = Q * P.transpose();
@@ -101,41 +107,61 @@ MatrixXi RandomProjectionLSHModel::hash(const MatrixXd& Q, const MatrixXd& P) {
 
 template <typename ResultType>
 vector<vector<ResultType>> RandomProjectionLSHModel::query_impl(const MatrixXd& Q) {
+    auto start_time = chrono::high_resolution_clock::now();
+
     MatrixXi H_q = hash(Q, P);
     vector<vector<ResultType>> all_candidates(Q.rows());
+    
+    // store a bitmask of seen candidates as an alternative to unordered_set. benefit is two-fold:
+    // 1) avoid hash overhead of unordered_set.insert() per query, per hash table
+    // 2) store q_candidates contiguously to make all_candidates.assign(...) iteration much faster
+    vector<bool> q_seen;
+    vector<int> q_candidates;
+    q_seen.resize(n_data_points, false);
 
     for (MatrixXd::Index i = 0; i < H_q.rows(); ++i) {
         VectorXi q_signature = H_q.row(i);
-        unordered_set<int> q_candidates;
+        q_candidates.clear();
 
-        // for each hash table, retrieve candidates that hashed to that table from index
         for (int j = 0; j < n_hash_tables; ++j) {
             int table_start = j * n_projections;
             VectorXi q_table_signature = q_signature(seqN(table_start, n_projections));
             vector<int8_t> q_compact_table_signature = to_compact_signature(q_table_signature);
 
-            // get candidates from hash table j
             auto& hash_table = index[j];
             auto it = hash_table.find(q_compact_table_signature);
             if (it != hash_table.end()) {
                 const vector<int>& table_candidates = it->second;
-                for (int candidate : table_candidates) {
-                    q_candidates.insert(candidate);
+
+                // check bitmask and add to candidates if not yet seen
+                for (int candidate_idx : table_candidates) {
+                    if (!q_seen[candidate_idx]) {
+                        q_seen[candidate_idx] = true;
+                        q_candidates.push_back(candidate_idx);
+                    }
                 }
             }
         }
 
-        all_candidates.reserve(q_candidates.size());
+        // reset bitmask
+        for (int candidate_idx : q_candidates) {
+            q_seen[candidate_idx] = false;
+        }
+
+        all_candidates[i].reserve(q_candidates.size());
         if constexpr (is_same_v<ResultType, int>) {
-            // store vector of indices
             all_candidates[i].assign(q_candidates.begin(), q_candidates.end());
-        } else { // ResultType == VectorXd
-            // store vector of vectors
+        } else {  // is_same_v<ResultType, VectorXd>
             for (int candidate_idx : q_candidates) {
                 all_candidates[i].push_back(X.value().row(candidate_idx));
             }
         }
     }
+    
+    auto end_time = chrono::high_resolution_clock::now();
+    chrono::duration<double> query_time = end_time - start_time;
+    clog << "Query completed in " << query_time.count() << " sec" << endl;
+    
     return all_candidates;
 }
 
@@ -270,7 +296,7 @@ void RandomProjectionLSHModel::save(const fs::path& save_dir) {
     if (!attributes.is_open()) {
         throw runtime_error("Could not create file '" + attributes_path.string() + "'");
     }
-    attributes << n_hash_tables << "\n" << n_projections << endl;
+    attributes << n_hash_tables << "\n" << n_projections << "\n" << n_data_points << endl;
 
     clog << "Model saved to " << save_dir << endl;
 }
@@ -298,9 +324,10 @@ RandomProjectionLSHModel RandomProjectionLSHModel::load(const fs::path& save_dir
     }
 
     int n_hash_tables, n_projections;
-    attributes >> n_hash_tables >> n_projections;
+    size_t n_data_points;
+    attributes >> n_hash_tables >> n_projections >> n_data_points;
 
     clog << "Model loaded from " << save_dir << endl;
 
-    return RandomProjectionLSHModel(n_hash_tables, n_projections, index, P, X);
+    return RandomProjectionLSHModel(n_hash_tables, n_projections, n_data_points, index, P, X);
 }
