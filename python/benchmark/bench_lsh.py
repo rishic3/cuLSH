@@ -59,7 +59,7 @@ def run_benchmark():
     print(f"Data shape: {X.shape}")
     print(f"Query shape: {Q.shape}")
 
-    Q_test = Q[: args.num_queries]
+    Q_test = Q[: args.n_queries]
     print(f"Using {len(Q_test)} test queries")
 
     lsh = RandomProjectionLSH(
@@ -118,7 +118,7 @@ def run_benchmark():
                     "n_hash_tables": args.n_hash_tables,
                     "n_projections": args.n_projections,
                     "seed": args.seed,
-                    "num_queries": args.num_queries,
+                    "n_queries": args.n_queries,
                 },
                 "runtimes": {
                     "fit_time": fit_time,
