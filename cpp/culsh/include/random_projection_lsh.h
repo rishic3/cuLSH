@@ -84,7 +84,7 @@ private:
 };
 
 /**
- * @brief Hash function for std::vector<int8_t>.
+ * @brief Hash function for std::vector<int8_t> directly on the byte sequence.
  * @param vec The vector of integers to hash.
  * @return The hash of the vector.
  */
