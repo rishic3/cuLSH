@@ -103,7 +103,7 @@ class RandomProjectionLSH:
         Returns:
             RandomProjectionLSHModel: the fitted model
         """
-        start_time = time.time()
+        start_time = time.perf_counter()
         d = X.shape[1]
         P = self._generate_random_projections(self._n_hash, d)
         H_x = self._hash(X, P)
@@ -123,7 +123,7 @@ class RandomProjectionLSH:
                 # convert signature to hashable type (tuple)
                 index[j][tuple(table_signature)].append(i)
 
-        end_time = time.time()
+        end_time = time.perf_counter()
         logger.info("Fit completed in %s seconds", round(end_time - start_time, 2))
 
         if self._store_data:
@@ -190,7 +190,7 @@ class RandomProjectionLSHModel:
             or
             list[list[np.ndarray]]: list of candidate neighbor vectors for each query
         """
-        start_time = time.time()
+        start_time = time.perf_counter()
         index = self._index
 
         H_q = self._hash(Q, self._P)
@@ -218,7 +218,7 @@ class RandomProjectionLSHModel:
             else:
                 all_candidates.append([])
 
-        end_time = time.time()
+        end_time = time.perf_counter()
         logger.info("Query completed in %s seconds", round(end_time - start_time, 2))
 
         return all_candidates
