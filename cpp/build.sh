@@ -11,5 +11,5 @@ cd "$BUILD_DIR"
 cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE" ..
 make -j$(nproc)
 
-echo "built main: $BUILD_DIR/main"
-echo "built bench_lsh: $BUILD_DIR/bench_lsh"
+echo "Built main: $BUILD_DIR/main"
+echo "Built bench_lsh: $BUILD_DIR/bench_lsh"

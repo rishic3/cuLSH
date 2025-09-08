@@ -8,7 +8,7 @@ set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 set(EIGEN_DIR "${THIRD_PARTY_DIR}/eigen")
 
 if(NOT EXISTS "${EIGEN_DIR}")
-    message(WARNING "Eigen not found at ${EIGEN_DIR}. Run 'install-deps' first.")
+    message(WARNING "Eigen not found at ${EIGEN_DIR}. Run './install_deps.sh' first.")
 endif()
 
 include_directories(${EIGEN_DIR})
@@ -35,13 +35,3 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
-
-add_custom_target(install-deps
-    COMMAND mkdir -p ${THIRD_PARTY_DIR}
-    COMMAND cd ${THIRD_PARTY_DIR} && 
-            wget https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz &&
-            tar -xzf eigen-3.4.0.tar.gz &&
-            mv eigen-3.4.0 eigen
-    COMMENT "Downloading and installing Eigen 3.4.0..."
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
