@@ -23,8 +23,8 @@ int main() {
 
     // read SIFT .fvecs format
     // see benchmark/bench_lsh.cpp for read_fvecs implementation
-    MatrixXd X = read_fvecs("../data/sift_base.fvecs");
-    MatrixXd Q = read_fvecs("../data/sift_query.fvecs");
+    Eigen::MatrixXd X = read_fvecs("../data/sift_base.fvecs");
+    Eigen::MatrixXd Q = read_fvecs("../data/sift_query.fvecs");
 
     // fit - returns RandomProjectionLSHModel with index
     auto model = lsh.fit(X);
