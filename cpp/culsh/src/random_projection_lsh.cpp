@@ -61,8 +61,9 @@ MatrixXi RandomProjectionLSH::hash(const MatrixXd& X, const MatrixXd& P) {
 
 RandomProjectionLSHModel RandomProjectionLSH::fit(const MatrixXd& X) {
     auto start_time = chrono::high_resolution_clock::now();
-
     MatrixXd::Index d = X.cols();
+
+    // hash to get input signatures
     MatrixXd P = generate_random_projections(n_hash, d);
     MatrixXi H_x = hash(X, P);
 
@@ -110,12 +111,13 @@ template <typename ResultType>
 vector<vector<ResultType>> RandomProjectionLSHModel::query_impl(const MatrixXd& Q) {
     auto start_time = chrono::high_resolution_clock::now();
 
+    // hash to get query signatures
     MatrixXi H_q = hash(Q, P);
     vector<vector<ResultType>> all_candidates(Q.rows());
 
     // store a bitmask of seen candidates as an alternative to unordered_set. benefit is two-fold:
     // 1) avoid hash overhead of unordered_set.insert() per query, per hash table
-    // 2) store q_candidates contiguously to make all_candidates.assign(...) iteration much faster
+    // 2) store q_candidates contiguously to make all_candidates.assign(...) much faster
     vector<bool> q_seen;
     vector<int> q_candidates;
     q_seen.resize(n_data_points, false);
@@ -124,6 +126,7 @@ vector<vector<ResultType>> RandomProjectionLSHModel::query_impl(const MatrixXd& 
         VectorXi q_signature = H_q.row(i);
         q_candidates.clear();
 
+        // for the given query, retrieve candidates from each hash table
         for (int j = 0; j < n_hash_tables; ++j) {
             int table_start = j * n_projections;
             VectorXi q_table_signature = q_signature(seqN(table_start, n_projections));
@@ -134,7 +137,7 @@ vector<vector<ResultType>> RandomProjectionLSHModel::query_impl(const MatrixXd& 
             if (it != hash_table.end()) {
                 const vector<int>& table_candidates = it->second;
 
-                // check bitmask and add to candidates if not yet seen
+                // check bitmask and add to q_candidates if not yet seen
                 for (int candidate_idx : table_candidates) {
                     if (!q_seen[candidate_idx]) {
                         q_seen[candidate_idx] = true;
@@ -151,8 +154,13 @@ vector<vector<ResultType>> RandomProjectionLSHModel::query_impl(const MatrixXd& 
 
         all_candidates[i].reserve(q_candidates.size());
         if constexpr (is_same_v<ResultType, int>) {
+            // each query gets a vector of candidate indices
             all_candidates[i].assign(q_candidates.begin(), q_candidates.end());
         } else { // is_same_v<ResultType, VectorXd>
+            if (!X.has_value()) {
+                throw runtime_error("Expected input data to be stored for querying vectors");
+            }
+            // each query gets a vector of candidate vectors
             for (int candidate_idx : q_candidates) {
                 all_candidates[i].push_back(X.value().row(candidate_idx));
             }
