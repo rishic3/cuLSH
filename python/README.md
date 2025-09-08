@@ -15,7 +15,7 @@ import numpy as np
 from lsh.random_projection_lsh import RandomProjectionLSH, RandomProjectionLSHModel
 
 def read_fvecs(fp):
-    # read .fvecs from SIFT: http://corpus-texmex.irisa.fr/
+    # read SIFT .fvecs format
     a = np.fromfile(fp, dtype='int32')
     d = a[0]
     return a.reshape(-1, d + 1)[:, 1:].copy().view('float32')
@@ -34,10 +34,8 @@ all_neighbors = model.query(Q[:100])
 
 ## Benchmarking
 
-```shell
-# Download sift1m to data/sift
-python benchmark/download_sift1m.py
+Run the [download script](../download_sift1m.sh) to download the [SIFT1M dataset](http://corpus-texmex.irisa.fr/).
 
-# Run benchmark
-./run_benchmark -d data/sift --n-hash-tables 64 --n-projections 8 --n-queries 10000
+```shell
+./run_benchmark -d ../data/sift --n-hash-tables 64 --n-projections 8 --n-queries 10000
 ```
