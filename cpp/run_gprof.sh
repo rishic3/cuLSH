@@ -17,10 +17,10 @@ make -j$(nproc)
 
 cd ..
 
-echo "Profile build completed: $BUILD_DIR/bench_lsh"
+echo "Built bench_lsh: $BUILD_DIR/bench_lsh"
 
 if [ $# -eq 0 ]; then
-    echo "Please provide required bench_lsh arguments."
+    echo "Please provide bench_lsh args."
     exit 1
 fi
 
