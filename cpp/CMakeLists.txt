@@ -28,7 +28,7 @@ add_executable(bench_lsh benchmark/bench_lsh.cpp)
 target_link_libraries(bench_lsh culsh_lib)
 
 # build type
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 
 # default to
