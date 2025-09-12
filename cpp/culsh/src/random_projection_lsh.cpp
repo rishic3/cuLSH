@@ -39,10 +39,10 @@ RandomProjectionLSH::RandomProjectionLSH(int n_hash_tables, int n_projections, u
       n_hash(n_hash_tables * n_projections), store_data(false), seed(seed), rng(seed),
       normal_dist(0.0, 1.0) {}
 
-MatrixXd RandomProjectionLSH::generate_random_projections(int n_hash, int d) {
-    MatrixXd random_vecs(n_hash, d);
+MatrixXd RandomProjectionLSH::generate_random_projections(int n, int d) {
+    MatrixXd random_vecs(n, d);
 
-    for (int i = 0; i < n_hash; ++i) {
+    for (int i = 0; i < n; ++i) {
         for (int j = 0; j < d; ++j) {
             random_vecs(i, j) = normal_dist(rng);
         }

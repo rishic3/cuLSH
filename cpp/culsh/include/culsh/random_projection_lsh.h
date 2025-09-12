@@ -69,11 +69,11 @@ private:
 
     /**
      * @brief Sample n_hash random unit vectors from a d-dimensional sphere.
-     * @param n_hash The number of random unit vectors to generate.
+     * @param n The number of random unit vectors to generate.
      * @param d The dimensionality of the random unit vectors.
      * @return The n_hash x d matrix of random unit vectors.
      */
-    MatrixXd generate_random_projections(int n_hash, int d);
+    MatrixXd generate_random_projections(int n, int d);
     /**
      * @brief Hash the input vectors X using the matrix of normal unit vectors P.
      * @param X The n x d matrix of input vectors.
