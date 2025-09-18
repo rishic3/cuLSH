@@ -1,152 +1,92 @@
 #pragma once
 
 #include "../utils/utils.cuh"
+#include <cstdint>
 #include <cuda_runtime.h>
-#include <device_launch_parameters.h>
 #include <curand.h>
-#include <chrono>
-#include <iostream>
+#include <device_launch_parameters.h>
+#include <math.h>
+#include <stdexcept>
 
 namespace culsh {
 namespace rplsh {
+namespace detail {
 
-__global__ void normalize_rows_kernel(float* P, int n_rows, int n_cols) {
-    int row_idx = blockIdx.x * blockDim.x + threadIdx.x;
+template <typename DType>
+__global__ void normalize_vectors_kernel(int n_rows, int n_cols, DType* P) {
+    // each block normalizes one row
+    size_t row_idx = static_cast<size_t>(blockIdx.x);
+    if (row_idx >= n_rows)
+        return;
 
-    if (row_idx < n_rows) {
-        // compute row-wise norm
-        float row_norm = 0.0f;
-        for (int col_idx = 0; col_idx < n_cols; ++col_idx) {
-            float val = P[row_idx * n_cols + col_idx];
-            row_norm += val * val;
-        }
-        row_norm = sqrtf(row_norm);
-
-        // normalize row
-        if (row_norm > 1e-8f) {  // check div by zero
-            for (int col_idx = 0; col_idx < n_cols; ++col_idx) {
-                P[row_idx * n_cols + col_idx] /= row_norm;
-            }
-        }
-    }
-}
-
-__global__ void calculate_norms_kernel(const float* P, float* norms, int n_rows, int n_cols) {
-    // Each block calculates the norm for one row
-    int row = blockIdx.x;
-    if (row >= n_rows) return;
-
-    // Use shared memory for parallel reduction within a block
-    extern __shared__ float sdata[];
+    // store partial sum of squares for each thread
+    extern __shared__ DType sdata[];
 
     unsigned int tid = threadIdx.x;
-    float sum_sq = 0.0f;
-    // Each thread calculates a partial sum of squares
-    for (unsigned int i = tid; i < n_cols; i += blockDim.x) {
-        float val = P[row * n_cols + i];
+
+    DType sum_sq = DType(0.0);
+    for (size_t col_idx = tid; col_idx < n_cols; col_idx += blockDim.x) {
+        DType val = P[row_idx * n_cols + col_idx];
         sum_sq += val * val;
     }
     sdata[tid] = sum_sq;
     __syncthreads();
 
-    // Perform reduction in shared memory
+    // reduce to get sum of squares for row
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
             sdata[tid] += sdata[tid + s];
         }
         __syncthreads();
     }
+    DType row_norm = sqrt(sdata[0]);
 
-    // First thread writes the final result (sqrt of sum of squares)
-    if (tid == 0) {
-        norms[row] = sqrtf(sdata[0]);
-    }
-}
-
-__global__ void normalize_vectors_kernel(float* P, const float* norms, int n_rows, int n_cols) {
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if (row < n_rows && col < n_cols) {
-        float norm = norms[row];
-        // Avoid division by zero
-        if (norm > 1e-8f) {
-            P[row * n_cols + col] /= norm;
+    // normalize row
+    if (row_norm > DType(1e-8)) { // check div by zero
+        DType inv_norm = DType(1.0) / row_norm;
+        for (size_t col_idx = tid; col_idx < n_cols; col_idx += blockDim.x) {
+            P[row_idx * n_cols + col_idx] *= inv_norm;
         }
     }
 }
 
-extern "C" {
-
-float* generate_random_projections(int n, int d) {
+/**
+ * @brief Sample n_rows random unit vectors from a n_cols-dimensional sphere.
+ * @param[in] stream CUDA stream.
+ * @param[in] n_rows Number of vectors to generate.
+ * @param[in] n_cols Dimensionality of each vector.
+ * @param[in] seed Seed for the random number generator.
+ * @param[out] P n_rows x n_cols matrix of random unit vectors.
+ */
+template <typename DType>
+void generate_random_projections(cudaStream_t stream, int n_rows, int n_cols, uint64_t seed,
+                                 DType* P) {
     // create curand generator
     curandGenerator_t rng;
     CURAND_CHECK(curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT));
+    CURAND_CHECK(curandSetPseudoRandomGeneratorSeed(rng, seed));
 
-    // allocate space for output matrix on device
-    float* P;
-    size_t projection_size = static_cast<size_t>(n) * d;
+    size_t projection_size = static_cast<size_t>(n_rows) * n_cols;
 
-    auto start_time = std::chrono::high_resolution_clock::now();
-
-    CUDA_CHECK(cudaMalloc(&P, projection_size * sizeof(float)));
-
-    // generate n_hash * d random floats
-    CURAND_CHECK(curandGenerateNormal(rng, P, projection_size, 0.0f, 1.0f));
+    if constexpr (std::is_same_v<DType, float>) {
+        // generate random normal floats
+        CURAND_CHECK(curandGenerateNormal(rng, P, projection_size, 0.0f, 1.0f));
+    } else if constexpr (std::is_same_v<DType, double>) {
+        // generate random normal doubles
+        CURAND_CHECK(curandGenerateNormalDouble(rng, P, projection_size, 0.0, 1.0));
+    } else {
+        throw std::invalid_argument("Expected float or double type");
+    }
 
     // launch row-wise norm kernel
-    int block_size = 256;
-    int grid_size = (n + block_size - 1) / block_size;
-    normalize_rows_kernel<<<grid_size, block_size>>>(P, n, d);
+    int block_size = std::min(n_cols, 1024);
+    int smem_size = block_size * sizeof(DType);
+    normalize_vectors_kernel<DType><<<n_rows, block_size, smem_size, stream>>>(n_rows, n_cols, P);
 
-    CUDA_CHECK(cudaDeviceSynchronize());
-
-    auto end_time = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> kernel_time = end_time - start_time;
-    std::cout << "Single kernel approach completed in " << kernel_time.count() << " sec" << std::endl;
-
+    CUDA_CHECK(cudaStreamSynchronize(stream)); // tbd - remove this sync?
     CURAND_CHECK(curandDestroyGenerator(rng));
-
-    return P;
 }
 
-float* generate_random_projections_two_kernels(int n, int d) {
-    curandGenerator_t rng;
-    CURAND_CHECK(curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT));
-
-    float* P;
-    float* norms;
-    size_t projection_size = static_cast<size_t>(n) * d;
-    size_t norms_size = static_cast<size_t>(n);
-
-    auto start_time = std::chrono::high_resolution_clock::now();
-
-    CUDA_CHECK(cudaMalloc(&P, projection_size * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&norms, norms_size * sizeof(float)));
-
-    CURAND_CHECK(curandGenerateNormal(rng, P, projection_size, 0.0f, 1.0f));
-
-    calculate_norms_kernel<<<n, 256, 256 * sizeof(float)>>>(P, norms, n, d);
-    CUDA_CHECK(cudaGetLastError());
-    
-    dim3 threadsPerBlock(16, 16);
-    dim3 numBlocks((d + threadsPerBlock.x - 1) / threadsPerBlock.x, 
-                   (n + threadsPerBlock.y - 1) / threadsPerBlock.y);
-    normalize_vectors_kernel<<<numBlocks, threadsPerBlock>>>(P, norms, n, d);
-
-    CUDA_CHECK(cudaDeviceSynchronize());
-
-    auto end_time = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> kernel_time = end_time - start_time;
-    std::cout << "Two kernel approach completed in " << kernel_time.count() << " sec" << std::endl;
-
-    CURAND_CHECK(curandDestroyGenerator(rng));
-    CUDA_CHECK(cudaFree(norms));
-
-    return P;
-}
-
-} // extern "C"
-
+} // namespace detail
 } // namespace rplsh
 } // namespace culsh
