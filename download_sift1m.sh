@@ -11,7 +11,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         *)
-            echo "Unknown argument: $1"
+            echo "Usage: $0 [--dir <data_dir>]"
             exit 1
             ;;
     esac
