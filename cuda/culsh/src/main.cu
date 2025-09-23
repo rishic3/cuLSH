@@ -1,5 +1,8 @@
+#include "rplsh/index.cuh"
 #include "rplsh/kernels/hash.cuh"
+#include "rplsh/kernels/indexing.cuh"
 #include "rplsh/kernels/projections.cuh"
+
 #include <chrono>
 #include <cmath>
 #include <cuda_runtime.h>
@@ -72,7 +75,6 @@ void test_generate_random_projections(bool validate) {
 
         // Verify normalization: each row should have unit norm
         std::cout << "\nVerifying normalization (each vector should have norm ≈ 1.0):" << std::endl;
-        bool all_normalized = true;
 
         for (int i = 0; i < n; i++) {
             float norm_sq = 0.0f;
@@ -93,7 +95,7 @@ void test_generate_random_projections(bool validate) {
 
             // Check if norm is approximately 1.0
             if (std::abs(norm - 1.0f) > 1e-8f) {
-                all_normalized = false;
+                std::cout << "Vector " << i << " is not normalized" << std::endl;
             }
         }
     }
@@ -107,7 +109,7 @@ void test_hash() {
     const int d = 128;
     const int n_hash_tables = 64;
     const int n_projections = 8;
-    const int n_hash = n_hash_tables * n_projections;
+    const int n_total_buckets = n_hash_tables * n_projections;
 
     float* X;
     float* P;
@@ -123,15 +125,15 @@ void test_hash() {
 
     // allocate memory for X, P, X_hash
     CUDA_CHECK(cudaMalloc(&X, static_cast<size_t>(n) * d * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&P, static_cast<size_t>(n_hash) * d * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&X_hash, static_cast<size_t>(n) * n_hash * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&P, static_cast<size_t>(n_total_buckets) * d * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&X_hash, static_cast<size_t>(n) * n_total_buckets * sizeof(float)));
 
     // generate X
     generate_x(X, n, d, 12345);
 
     auto start_generate_projections = std::chrono::high_resolution_clock::now();
     // generate random projections
-    culsh::rplsh::detail::generate_random_projections<float>(stream, n_hash, d, 12345, P);
+    culsh::rplsh::detail::generate_random_projections<float>(stream, n_total_buckets, d, 12345, P);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end_generate_projections = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> generate_projections_time =
@@ -141,7 +143,8 @@ void test_hash() {
 
     auto start_hash = std::chrono::high_resolution_clock::now();
     // hash
-    culsh::rplsh::detail::hash<float>(cublas_handle, stream, X, P, n, d, n_hash, X_hash);
+    culsh::rplsh::detail::hash<float>(cublas_handle, stream, X, P, n, d, n_hash_tables,
+                                      n_projections, X_hash);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end_hash = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> hash_time = end_hash - start_hash;
@@ -154,8 +157,8 @@ void test_hash() {
 
     // allocate memory for signatures
     int8_t* X_signatures;
-    CUDA_CHECK(cudaMalloc(&X_signatures,
-                          static_cast<size_t>(n) * n_hash_tables * n_projections * sizeof(int8_t)));
+    CUDA_CHECK(
+        cudaMalloc(&X_signatures, static_cast<size_t>(n) * n_total_buckets * sizeof(int8_t)));
 
     auto start_compute_signatures = std::chrono::high_resolution_clock::now();
     // convert hash values to signatures
@@ -167,6 +170,21 @@ void test_hash() {
         end_compute_signatures - start_compute_signatures;
     std::cout << "Computed signatures in " << compute_signatures_time.count() << " sec"
               << std::endl;
+
+    auto start_build_index = std::chrono::high_resolution_clock::now();
+    // build index
+    culsh::rplsh::RPLSHIndex index =
+        culsh::rplsh::detail::build_index(stream, X_signatures, n, n_hash_tables, n_projections);
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    auto end_build_index = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> build_index_time = end_build_index - start_build_index;
+    std::cout << "Built index in " << build_index_time.count() << " sec" << std::endl;
+
+    // print index metadata
+    std::cout << "Index metadata: " << std::endl;
+    std::cout << "  n_total_buckets: " << index.n_total_buckets << std::endl;
+    std::cout << "  n_hash_tables: " << index.n_hash_tables << std::endl;
+    std::cout << "  n_projections: " << index.n_projections << std::endl;
 
     CUDA_CHECK(cudaGetLastError());
 

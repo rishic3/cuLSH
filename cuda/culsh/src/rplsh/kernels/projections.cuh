@@ -83,7 +83,7 @@ void generate_random_projections(cudaStream_t stream, int n_rows, int n_cols, ui
     int smem_size = block_size * sizeof(DType);
     normalize_vectors_kernel<DType><<<n_rows, block_size, smem_size, stream>>>(n_rows, n_cols, P);
 
-    CUDA_CHECK(cudaStreamSynchronize(stream)); // tbd - remove this sync?
+    CUDA_CHECK(cudaStreamSynchronize(stream)); // TODO: - remove this sync?
     CURAND_CHECK(curandDestroyGenerator(rng));
 }
 
