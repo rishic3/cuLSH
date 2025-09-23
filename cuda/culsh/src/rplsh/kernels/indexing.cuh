@@ -150,6 +150,12 @@ __global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* so
 
 /**
  * @brief Build flat LSH index structure on GPU
+ * @param[in] stream CUDA stream.
+ * @param[in] X_sig int8_t signature matrix (n_rows x n_hash_tables * n_projections).
+ * @param[in] n_rows Number of input rows.
+ * @param[in] n_hash_tables Number of hash tables.
+ * @param[in] n_projections Number of projections.
+ * @return RPLSHIndex Index.
  */
 RPLSHIndex build_index(cudaStream_t stream, const int8_t* X_sig, int n_rows, int n_hash_tables, int n_projections) {
     size_t n_items = static_cast<size_t>(n_rows) * n_hash_tables;
