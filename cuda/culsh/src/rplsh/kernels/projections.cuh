@@ -12,11 +12,14 @@ namespace culsh {
 namespace rplsh {
 namespace detail {
 
+/**
+ * @brief Calculate and apply row-wise normalization to matrix P.
+ */
 template <typename DType>
-__global__ void normalize_vectors_kernel(int n_rows, int n_cols, DType* P) {
+__global__ void normalize_vectors_kernel(int n_samples, int n_features, DType* P) {
     // each block normalizes one row
     size_t row_idx = static_cast<size_t>(blockIdx.x);
-    if (row_idx >= n_rows)
+    if (row_idx >= n_samples)
         return;
 
     // store partial sum of squares for each thread
@@ -25,8 +28,8 @@ __global__ void normalize_vectors_kernel(int n_rows, int n_cols, DType* P) {
     unsigned int tid = threadIdx.x;
 
     DType sum_sq = DType(0.0);
-    for (size_t col_idx = tid; col_idx < n_cols; col_idx += blockDim.x) {
-        DType val = P[row_idx * n_cols + col_idx];
+    for (size_t col_idx = tid; col_idx < n_features; col_idx += blockDim.x) {
+        DType val = P[row_idx * n_features + col_idx];
         sum_sq += val * val;
     }
     sdata[tid] = sum_sq;
@@ -44,29 +47,29 @@ __global__ void normalize_vectors_kernel(int n_rows, int n_cols, DType* P) {
     // normalize row
     if (row_norm > DType(1e-8)) { // check div by zero
         DType inv_norm = DType(1.0) / row_norm;
-        for (size_t col_idx = tid; col_idx < n_cols; col_idx += blockDim.x) {
-            P[row_idx * n_cols + col_idx] *= inv_norm;
+        for (size_t col_idx = tid; col_idx < n_features; col_idx += blockDim.x) {
+            P[row_idx * n_features + col_idx] *= inv_norm;
         }
     }
 }
 
 /**
- * @brief Sample n_rows random unit vectors from a n_cols-dimensional sphere.
- * @param[in] stream CUDA stream.
- * @param[in] n_rows Number of vectors to generate.
- * @param[in] n_cols Dimensionality of each vector.
- * @param[in] seed Seed for the random number generator.
- * @param[out] P n_rows x n_cols matrix of random unit vectors.
+ * @brief Sample n_samples random unit vectors from a n_features-dimensional sphere
+ * @param[in] stream CUDA stream
+ * @param[in] n_samples Number of vectors to generate
+ * @param[in] n_features Dimensionality of each vector
+ * @param[in] seed Seed for the random number generator
+ * @param[out] P n_samples x n_features matrix of random unit vectors
  */
 template <typename DType>
-void generate_random_projections(cudaStream_t stream, int n_rows, int n_cols, uint64_t seed,
+void generate_random_projections(cudaStream_t stream, int n_samples, int n_features, uint64_t seed,
                                  DType* P) {
     // create curand generator
     curandGenerator_t rng;
     CURAND_CHECK(curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT));
     CURAND_CHECK(curandSetPseudoRandomGeneratorSeed(rng, seed));
 
-    size_t projection_size = static_cast<size_t>(n_rows) * n_cols;
+    size_t projection_size = static_cast<size_t>(n_samples) * n_features;
 
     if constexpr (std::is_same_v<DType, float>) {
         // generate random normal floats
@@ -79,9 +82,9 @@ void generate_random_projections(cudaStream_t stream, int n_rows, int n_cols, ui
     }
 
     // launch row-wise norm kernel
-    int block_size = std::min(n_cols, 1024);
+    int block_size = std::min(n_features, 1024);
     int smem_size = block_size * sizeof(DType);
-    normalize_vectors_kernel<DType><<<n_rows, block_size, smem_size, stream>>>(n_rows, n_cols, P);
+    normalize_vectors_kernel<DType><<<n_samples, block_size, smem_size, stream>>>(n_samples, n_features, P);
 
     CUDA_CHECK(cudaStreamSynchronize(stream)); // TODO: - remove this sync?
     CURAND_CHECK(curandDestroyGenerator(rng));

@@ -10,13 +10,16 @@ namespace culsh {
 namespace rplsh {
 namespace detail {
 
+/**
+ * @brief Convert hashed input matrix to binary signatures, laid out contiguously per table.
+ */
 template <typename DType>
-__global__ void compute_signatures_kernel(const DType* X_hash, int n_rows, int n_hash_tables,
+__global__ void compute_signatures_kernel(const DType* X_hash, int n_samples, int n_hash_tables,
                                           int n_projections, int8_t* X_sig) {
 
     // each thread computes one signature
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-    size_t total_elements = static_cast<size_t>(n_rows) * n_hash_tables * n_projections;
+    size_t total_elements = static_cast<size_t>(n_samples) * n_hash_tables * n_projections;
 
     if (idx >= total_elements)
         return;
@@ -30,7 +33,7 @@ __global__ void compute_signatures_kernel(const DType* X_hash, int n_rows, int n
         row_idx * (n_hash_tables * n_projections) + table_idx * n_projections + proj_idx;
 
     // lay out signatures contiguously per table
-    size_t sig_idx = table_idx * (n_rows * n_projections) + row_idx * n_projections + proj_idx;
+    size_t sig_idx = table_idx * (n_samples * n_projections) + row_idx * n_projections + proj_idx;
 
     // convert to binary signature
     X_sig[sig_idx] = (X_hash[hash_idx] > DType(0)) ? int8_t(1) : int8_t(0);
@@ -39,36 +42,36 @@ __global__ void compute_signatures_kernel(const DType* X_hash, int n_rows, int n
 /**
  * @brief Compute signatures from hashed input vectors.
  * @param[in] stream CUDA stream.
- * @param[in] X_hash Hashed input vectors (n_rows x n_hash_tables * n_projections).
- * @param[in] n_rows Number of input vectors.
+ * @param[in] X_hash Hashed input vectors (n_samples x n_hash_tables * n_projections).
+ * @param[in] n_samples Number of input vectors.
  * @param[in] n_hash_tables Number of hash tables.
  * @param[in] n_projections Number of projections.
- * @param[out] X_sig Compressed output signatures (n_rows x n_hash_tables * n_projections).
+ * @param[out] X_sig Compressed output signatures (n_samples x n_hash_tables * n_projections).
  */
 template <typename DType>
-void compute_signatures(cudaStream_t stream, const DType* X_hash, int n_rows, int n_hash_tables,
+void compute_signatures(cudaStream_t stream, const DType* X_hash, int n_samples, int n_hash_tables,
                         int n_projections, int8_t* X_sig) {
     dim3 block_size(256);
-    dim3 grid_size((n_rows + block_size.x - 1) / block_size.x);
-    compute_signatures_kernel<<<grid_size, block_size, 0, stream>>>(X_hash, n_rows, n_hash_tables,
+    dim3 grid_size((n_samples + block_size.x - 1) / block_size.x);
+    compute_signatures_kernel<<<grid_size, block_size, 0, stream>>>(X_hash, n_samples, n_hash_tables,
                                                                     n_projections, X_sig);
 }
 
 /**
- * @brief Hash the input vectors X using random projection matrix P.
- * @param[in] cublas_handle cuBLAS handle.
- * @param[in] stream CUDA stream.
- * @param[in] X Input vectors (n_rows x n_cols).
- * @param[in] P Random projection matrix (n_hash x n_cols).
- * @param[in] n_rows Number of input vectors.
- * @param[in] n_cols Dimensionality of each input vector.
- * @param[in] n_hash_tables Number of hash tables.
- * @param[in] n_projections Number of projections.
- * @param[out] X_hash Hashed input vectors (n_rows x n_hash).
+ * @brief Hash the input vectors X using random projection matrix P
+ * @param[in] cublas_handle cuBLAS handle
+ * @param[in] stream CUDA stream
+ * @param[in] X Input vectors (n_samples x n_features)
+ * @param[in] P Random projection matrix (n_hash x n_features)
+ * @param[in] n_samples Number of input vectors
+ * @param[in] n_features Dimensionality of each input vector
+ * @param[in] n_hash_tables Number of hash tables
+ * @param[in] n_projections Number of projections
+ * @param[out] X_hash Hashed input vectors (n_samples x n_hash)
  */
 template <typename DType>
 void hash(cublasHandle_t cublas_handle, cudaStream_t stream, const DType* X, const DType* P,
-          int n_rows, int n_cols, int n_hash_tables, int n_projections, DType* X_hash) {
+          int n_samples, int n_features, int n_hash_tables, int n_projections, DType* X_hash) {
 
     cublasSetStream(cublas_handle, stream);
 
@@ -80,12 +83,12 @@ void hash(cublasHandle_t cublas_handle, cudaStream_t stream, const DType* X, con
     // In col-major (used by cuBLAS - denoting with _c), we have X_c = X^T, P_c = P^T.
     // Thus to get X_hash in row-major, compute P_c^T * X_c = X_hash_c^T = X_hash.
     if constexpr (std::is_same_v<DType, float>) {
-        CUBLAS_CHECK(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, n_hash_tables, n_rows,
-                                 n_cols, &alpha, P, n_cols, X, n_cols, &beta, X_hash,
+        CUBLAS_CHECK(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, n_hash_tables, n_samples,
+                                 n_features, &alpha, P, n_features, X, n_features, &beta, X_hash,
                                  n_total_buckets));
     } else if constexpr (std::is_same_v<DType, double>) {
-        CUBLAS_CHECK(cublasDgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, n_hash_tables, n_rows,
-                                 n_cols, &alpha, P, n_cols, X, n_cols, &beta, X_hash,
+        CUBLAS_CHECK(cublasDgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, n_hash_tables, n_samples,
+                                 n_features, &alpha, P, n_features, X, n_features, &beta, X_hash,
                                  n_total_buckets));
     } else {
         throw std::invalid_argument("Expected float or double dtype");
