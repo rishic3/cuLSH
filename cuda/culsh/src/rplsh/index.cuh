@@ -13,13 +13,13 @@ class RPLSHIndex {
 public:
     /**
      * @brief Device pointer to flat sorted array of all candidate indices.
-     * @note Candidates for each signature stored contiguously starting at signature_start_indices[i].
+     * Candidates for each signature stored contiguously starting at signature_start_indices[i].
      */
     int* all_candidate_indices;
 
     /**
      * @brief Device pointer to flat sorted array of all bucket signatures for each hash tables.
-     * @note Bucket signatures for each hash table stored contiguously starting at table_start_indices[i].
+     * Bucket signatures for each hash table stored contiguously starting at table_start_indices[i].
      */
     int8_t* all_bucket_signatures;
 
@@ -42,7 +42,6 @@ public:
 
     /**
      * @brief Default constructor
-     * 
      */
     RPLSHIndex() : 
         all_candidate_indices(nullptr),
