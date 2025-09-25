@@ -77,19 +77,19 @@ void hash(cublasHandle_t cublas_handle, cudaStream_t stream, const DType* X, con
 
     const DType alpha = DType(1.0);
     const DType beta = DType(0.0);
-    const int n_total_buckets = n_hash_tables * n_projections;
+    const int n_total_projections = n_hash_tables * n_projections;
 
-    // Given row-major X, P, compute X * P^T = X_hash.
-    // In col-major (used by cuBLAS - denoting with _c), we have X_c = X^T, P_c = P^T.
-    // Thus to get X_hash in row-major, compute P_c^T * X_c = X_hash_c^T = X_hash.
+    // given row-major X, P, compute X * P^T = X_hash.
+    // in col-major (used by cuBLAS - denoting with _c), we have X_c = X^T, P_c = P^T.
+    // thus to get X_hash in row-major, compute P_c^T * X_c = X_hash_c^T = X_hash.
     if constexpr (std::is_same_v<DType, float>) {
-        CUBLAS_CHECK(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, n_hash_tables, n_samples,
+        CUBLAS_CHECK(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, n_total_projections, n_samples,
                                  n_features, &alpha, P, n_features, X, n_features, &beta, X_hash,
-                                 n_total_buckets));
+                                 n_total_projections));
     } else if constexpr (std::is_same_v<DType, double>) {
-        CUBLAS_CHECK(cublasDgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, n_hash_tables, n_samples,
+        CUBLAS_CHECK(cublasDgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, n_total_projections, n_samples,
                                  n_features, &alpha, P, n_features, X, n_features, &beta, X_hash,
-                                 n_total_buckets));
+                                 n_total_projections));
     } else {
         throw std::invalid_argument("Expected float or double dtype");
     }

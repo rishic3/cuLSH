@@ -23,7 +23,8 @@ __global__ void normalize_vectors_kernel(int n_samples, int n_features, DType* P
         return;
 
     // store partial sum of squares for each thread
-    extern __shared__ DType sdata[];
+    extern __shared__ char sdata_raw[];
+    DType* sdata = reinterpret_cast<DType*>(sdata_raw);  // must cast to templatized type to avoid compile error
 
     unsigned int tid = threadIdx.x;
 
