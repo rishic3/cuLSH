@@ -43,34 +43,26 @@ public:
     /**
      * @brief Default constructor
      */
-    RPLSHIndex() : 
-        all_candidate_indices(nullptr),
-        all_bucket_signatures(nullptr), 
-        bucket_candidate_offsets(nullptr),
-        table_bucket_offsets(nullptr),
-        n_total_buckets(0),
-        n_hash_tables(0),
-        n_projections(0) {}
+    RPLSHIndex()
+        : all_candidate_indices(nullptr), all_bucket_signatures(nullptr),
+          bucket_candidate_offsets(nullptr), table_bucket_offsets(nullptr), n_total_buckets(0),
+          n_hash_tables(0), n_projections(0) {}
 
     /**
      * @brief Destructor
      */
-    ~RPLSHIndex() {
-        free_device_memory();
-    }
+    ~RPLSHIndex() { free_device_memory(); }
 
     /**
      * @brief Move constructor
      */
-    RPLSHIndex(RPLSHIndex&& other) noexcept :
-        all_candidate_indices(other.all_candidate_indices),
-        all_bucket_signatures(other.all_bucket_signatures),
-        bucket_candidate_offsets(other.bucket_candidate_offsets),
-        table_bucket_offsets(other.table_bucket_offsets),
-        n_total_buckets(other.n_total_buckets),
-        n_hash_tables(other.n_hash_tables),
-        n_projections(other.n_projections) {
-        
+    RPLSHIndex(RPLSHIndex&& other) noexcept
+        : all_candidate_indices(other.all_candidate_indices),
+          all_bucket_signatures(other.all_bucket_signatures),
+          bucket_candidate_offsets(other.bucket_candidate_offsets),
+          table_bucket_offsets(other.table_bucket_offsets), n_total_buckets(other.n_total_buckets),
+          n_hash_tables(other.n_hash_tables), n_projections(other.n_projections) {
+
         // nullify moved-from object to prevent double-free
         other.all_candidate_indices = nullptr;
         other.all_bucket_signatures = nullptr;
@@ -122,10 +114,8 @@ public:
      * @brief Check empty
      */
     bool empty() const {
-        return all_candidate_indices == nullptr && 
-               all_bucket_signatures == nullptr && 
-               bucket_candidate_offsets == nullptr && 
-               table_bucket_offsets == nullptr;
+        return all_candidate_indices == nullptr && all_bucket_signatures == nullptr &&
+               bucket_candidate_offsets == nullptr && table_bucket_offsets == nullptr;
     }
 
 private:
