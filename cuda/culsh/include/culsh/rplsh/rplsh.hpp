@@ -9,7 +9,12 @@ namespace rplsh {
 /**
  * @brief Random Projection LSH index
  */
-struct RPLSHIndex;
+struct Index;
+
+/**
+ * @brief Random Projection LSH candidates
+ */
+struct Candidates;
 
 /**
  * @brief Fit the Random Projection LSH model
@@ -21,10 +26,10 @@ struct RPLSHIndex;
  * @param[in] n_features Number of features
  * @param[in] params LSH params
  * @param[out] P Random projection matrix
- * @return RPLSHIndex RPLSH index
+ * @param[out] index RPLSH index
  */
-RPLSHIndex fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int n_samples,
-               int n_features, const RPLSHParams& params, float* P);
+Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int n_samples,
+          int n_features, const RPLSHParams& params, float* P);
 
 /**
  * @brief Fit the Random Projection LSH model
@@ -36,10 +41,10 @@ RPLSHIndex fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X
  * @param[in] n_features Number of features
  * @param[in] params LSH params
  * @param[out] P Random projection matrix
- * @return RPLSHIndex RPLSH index
+ * @param[out] index RPLSH index
  */
-RPLSHIndex fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, int n_samples,
-               int n_features, const RPLSHParams& params, double* P);
+Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, int n_samples,
+          int n_features, const RPLSHParams& params, double* P);
 
 /**
  * @brief Query the Random Projection LSH model for candidate neighbor indices
@@ -52,12 +57,11 @@ RPLSHIndex fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* 
  * @param[in] params LSH params
  * @param[in] P Random projection matrix
  * @param[in] index RPLSH hash table index
- * @param[out] candidates Output candidate indices (flattened)
- * @param[out] candidate_counts Number of candidates per query
+ * @param[out] candidates Output candidate indices
  */
-void query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q, int n_queries,
-                   int n_features, const RPLSHParams& params, const float* P,
-                   const RPLSHIndex* index, int* candidates, int* candidate_counts);
+Candidates query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q,
+                         int n_queries, int n_features, const RPLSHParams& params, const float* P,
+                         const Index* index);
 
 /**
  * @brief Query the Random Projection LSH model for candidate neighbor indices
@@ -70,12 +74,11 @@ void query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const floa
  * @param[in] params LSH params
  * @param[in] P Random projection matrix
  * @param[in] index RPLSH hash table index
- * @param[out] candidates Output candidate indices (flattened)
- * @param[out] candidate_counts Number of candidates per query
+ * @param[out] candidates Output candidate indices
  */
-void query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
-                   int n_queries, int n_features, const RPLSHParams& params, const double* P,
-                   const RPLSHIndex* index, int* candidates, int* candidate_counts);
+Candidates query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
+                         int n_queries, int n_features, const RPLSHParams& params, const double* P,
+                         const Index* index);
 
 /**
  * @brief Query the Random Projection LSH model for candidate neighbor vectors
@@ -89,13 +92,11 @@ void query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const doub
  * @param[in] P Random projection matrix
  * @param[in] index RPLSH hash table index
  * @param[in] X_stored Fitted data vectors
- * @param[out] candidate_vectors Output candidate vectors (flattened)
- * @param[out] candidate_counts Number of candidates per query
+ * @param[out] candidate_vectors Output candidate vectors
  */
-void query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q, int n_queries,
-                   int n_features, const RPLSHParams& params, const float* P,
-                   const RPLSHIndex* index, const float* X_stored, float* candidate_vectors,
-                   int* candidate_counts);
+Candidates query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q,
+                         int n_queries, int n_features, const RPLSHParams& params, const float* P,
+                         const Index* index, const float* X_stored);
 
 /**
  * @brief Query the Random Projection LSH model for candidate neighbor vectors
@@ -109,13 +110,11 @@ void query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, const floa
  * @param[in] P Random projection matrix
  * @param[in] index RPLSH hash table index
  * @param[in] X_stored Fitted data vectors
- * @param[out] candidate_vectors Output candidate vectors (flattened)
- * @param[out] candidate_counts Number of candidates per query
+ * @param[out] candidate_vectors Output candidate vectors
  */
-void query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
-                   int n_queries, int n_features, const RPLSHParams& params, const double* P,
-                   const RPLSHIndex* index, const double* X_stored, double* candidate_vectors,
-                   int* candidate_counts);
+Candidates query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
+                         int n_queries, int n_features, const RPLSHParams& params, const double* P,
+                         const Index* index, const double* X_stored);
 
 } // namespace rplsh
 } // namespace culsh

@@ -1,7 +1,8 @@
 #include "rplsh/index.cuh"
+#include "rplsh/kernels/build_index.cuh"
 #include "rplsh/kernels/hash.cuh"
-#include "rplsh/kernels/indexing.cuh"
 #include "rplsh/kernels/projections.cuh"
+#include "rplsh/kernels/query_index.cuh"
 
 #include <chrono>
 #include <cmath>
@@ -10,6 +11,12 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
+
+struct Params {
+    int n_hash_tables;
+    int n_projections;
+    int seed;
+};
 
 void generate_x(float* X, int n, int d, int seed) {
     curandGenerator_t rng;
@@ -22,90 +29,111 @@ void generate_x(float* X, int n, int d, int seed) {
     CURAND_CHECK(curandDestroyGenerator(rng));
 }
 
-void test_generate_random_projections(bool validate) {
-    const int n = 10000000;
-    const int d = 128;
+culsh::rplsh::Index main_fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X,
+                             int n_samples, int n_features, const Params& params, float* P) {
 
-    size_t projection_size = static_cast<size_t>(n) * d;
-    float* projections;
+    // allocate X_hash
+    float* X_hash;
+    CUDA_CHECK(cudaMalloc(&X_hash, static_cast<size_t>(n_samples) * params.n_hash_tables *
+                                       params.n_projections * sizeof(float)));
+
+    // generate random projections and hash X
+    culsh::rplsh::detail::generate_random_projections<float>(
+        stream, params.n_hash_tables * params.n_projections, n_features, params.seed, P);
+    culsh::rplsh::detail::hash<float>(cublas_handle, stream, X, P, n_samples, n_features,
+                                      params.n_hash_tables, params.n_projections, X_hash);
+
+    // compute binary signatures from X_hash
+    int8_t* X_sig;
+    CUDA_CHECK(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
+                                      params.n_projections * sizeof(int8_t)));
+    culsh::rplsh::detail::compute_signatures<float>(stream, X_hash, n_samples, params.n_hash_tables,
+                                                    params.n_projections, X_sig);
+    CUDA_CHECK(cudaFree(X_hash)); // done with X_hash
+
+    // build and return index
+    auto index = culsh::rplsh::detail::build_index(stream, X_sig, n_samples, params.n_hash_tables,
+                                                   params.n_projections);
+    CUDA_CHECK(cudaFree(X_sig));
+
+    return index;
+}
+
+void test() {
+    const int n = 10000000;
+    const int d = 512;
+    const int n_hash_tables = 64;
+    const int n_projections = 8;
+    const int n_total_buckets = n_hash_tables * n_projections;
 
     // create stream
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream));
 
-    // allocate projections on device
-    CUDA_CHECK(cudaMalloc(&projections, projection_size * sizeof(float)));
+    // create cublas handle
+    cublasHandle_t cublas_handle;
+    CUBLAS_CHECK(cublasCreate(&cublas_handle));
 
-    cudaDeviceProp device_prop;
-    CUDA_CHECK(cudaGetDeviceProperties(&device_prop, 0));
+    float* X;
+    float* P;
 
-    auto start_time = std::chrono::high_resolution_clock::now();
+    // allocate memory for X, P, X_hash
+    CUDA_CHECK(cudaMalloc(&X, static_cast<size_t>(n) * d * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&P, static_cast<size_t>(n_total_buckets) * d * sizeof(float)));
 
-    // generate random projections
-    culsh::rplsh::detail::generate_random_projections<float>(stream, n, d, 12345, projections);
-    // culsh::rplsh::detail::generate_random_projections_two_kernel<float>(stream, n, d, 12345,
-    // device_prop, projections);
+    generate_x(X, n, d, 12345);
 
-    CUDA_CHECK(cudaGetLastError());
+    auto params = Params{n_hash_tables, n_projections, 12345};
 
-    auto end_time = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> kernel_time = end_time - start_time;
-    std::cout << "Completed in " << kernel_time.count() << " sec" << std::endl;
+    auto start_fit = std::chrono::high_resolution_clock::now();
+    // Fit the LSH model and get the index
+    culsh::rplsh::Index index = main_fit(cublas_handle, stream, X, n, d, params, P);
+    auto end_fit = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> fit_time = end_fit - start_fit;
 
-    std::cout << "Generated " << n << " random projection vectors of dimension " << d << std::endl;
+    std::cout << "Built index with " << index.n_hash_tables << " hash tables and "
+              << index.n_projections << " projections per table" << std::endl;
+    std::cout << "  Fit took [" << fit_time.count() << "s]" << std::endl;
 
-    if (validate) {
-        std::vector<float> h_P(projection_size);
-        CUDA_CHECK(cudaMemcpy(h_P.data(), projections, projection_size, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaFree(X));
 
-        // Check first few rows to see if normalization worked
-        std::cout << "\nFirst 3 projection vectors:" << std::endl;
-        for (int i = 0; i < std::min(3, n); i++) {
-            std::cout << "Vector " << i << ": ";
+    // QUERY
+    float* Q;
+    CUDA_CHECK(cudaMalloc(&Q, static_cast<size_t>(n) * d * sizeof(float)));
+    generate_x(Q, n, d, 42);
 
-            // Print first few elements of this row
-            for (int j = 0; j < std::min(5, d); j++) {
-                std::cout << std::setw(8) << std::fixed << std::setprecision(4) << h_P[i * d + j]
-                          << " ";
-            }
-            if (d > 5)
-                std::cout << "...";
-            std::cout << std::endl;
-        }
+    float* Q_hash;
+    CUDA_CHECK(cudaMalloc(&Q_hash, static_cast<size_t>(n) * n_total_buckets * sizeof(float)));
 
-        // Verify normalization: each row should have unit norm
-        std::cout << "\nVerifying normalization (each vector should have norm ≈ 1.0):" << std::endl;
+    auto start_query = std::chrono::high_resolution_clock::now();
 
-        for (int i = 0; i < n; i++) {
-            float norm_sq = 0.0f;
+    culsh::rplsh::detail::hash<float>(cublas_handle, stream, Q, P, n, d, n_hash_tables,
+                                      n_projections, Q_hash);
 
-            // Compute norm of row i
-            for (int j = 0; j < d; j++) {
-                float val = h_P[i * d + j];
-                norm_sq += val * val;
-            }
+    CUDA_CHECK(cudaFree(P));
 
-            float norm = std::sqrt(norm_sq);
+    int8_t* Q_sig;
+    CUDA_CHECK(cudaMalloc(&Q_sig, static_cast<size_t>(n) * n_total_buckets * sizeof(int8_t)));
 
-            // Print first few norms
-            if (i < 5) {
-                std::cout << "Vector " << i << " norm: " << std::setprecision(6) << norm
-                          << std::endl;
-            }
+    // convert hash values to signatures
+    culsh::rplsh::detail::compute_signatures<float>(stream, Q_hash, n, n_hash_tables, n_projections,
+                                                    Q_sig);
 
-            // Check if norm is approximately 1.0
-            if (std::abs(norm - 1.0f) > 1e-8f) {
-                std::cout << "Vector " << i << " is not normalized" << std::endl;
-            }
-        }
-    }
+    CUDA_CHECK(cudaFree(Q_hash));
 
+    culsh::rplsh::Candidates candidates =
+        culsh::rplsh::detail::query_index(stream, Q_sig, n, n_hash_tables, n_projections, &index);
+
+    auto end_query = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> query_time = end_query - start_query;
+    std::cout << "  Query took [" << query_time.count() << "s]" << std::endl;
+
+    CUBLAS_CHECK(cublasDestroy(cublas_handle));
     CUDA_CHECK(cudaStreamDestroy(stream));
-    CUDA_CHECK(cudaFree(projections));
 }
 
-void test_hash() {
-    const int n = 10000000;
+void test_breakdown() {
+    const int n = 1000000;
     const int d = 128;
     const int n_hash_tables = 64;
     const int n_projections = 8;
@@ -150,9 +178,8 @@ void test_hash() {
     std::chrono::duration<double> hash_time = end_hash - start_hash;
     std::cout << "Hashed in " << hash_time.count() << " sec" << std::endl;
 
-    // free projections
+    // free input and projections
     CUDA_CHECK(cudaFree(P));
-    // free X
     CUDA_CHECK(cudaFree(X));
 
     // allocate memory for signatures
@@ -164,7 +191,7 @@ void test_hash() {
     // convert hash values to signatures
     culsh::rplsh::detail::compute_signatures<float>(stream, X_hash, n, n_hash_tables, n_projections,
                                                     X_signatures);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    // CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end_compute_signatures = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> compute_signatures_time =
         end_compute_signatures - start_compute_signatures;
@@ -173,13 +200,15 @@ void test_hash() {
 
     auto start_build_index = std::chrono::high_resolution_clock::now();
     // build index
-    culsh::rplsh::RPLSHIndex index =
+    culsh::rplsh::Index index =
         culsh::rplsh::detail::build_index(stream, X_signatures, n, n_hash_tables, n_projections);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    // CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end_build_index = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> build_index_time = end_build_index - start_build_index;
     std::cout << "Built index in " << build_index_time.count() << " sec" << std::endl;
 
+    std::chrono::duration<double> total_time = end_build_index - start_generate_projections;
+    std::cout << "   Total fit time in " << total_time.count() << " sec" << std::endl;
     // print index metadata
     std::cout << "Index metadata: " << std::endl;
     std::cout << "  n_total_buckets: " << index.n_total_buckets << std::endl;
@@ -191,8 +220,8 @@ void test_hash() {
     // free signatures
     CUDA_CHECK(cudaFree(X_signatures));
     CUDA_CHECK(cudaFree(X_hash));
-    CUDA_CHECK(cudaStreamDestroy(stream));
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
+    CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
 int main() {
@@ -203,6 +232,7 @@ int main() {
     std::cout << "Global Memory: " << prop.totalGlobalMem / (1024 * 1024) << " MB\n" << std::endl;
 
     // test_generate_random_projections(false);
-    test_hash();
+    // test_hash();
+    test();
     return 0;
 }

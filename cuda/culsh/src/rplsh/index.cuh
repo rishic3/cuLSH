@@ -9,7 +9,7 @@ namespace rplsh {
 /**
  * @brief Managed GPU LSH index.
  */
-class RPLSHIndex {
+class Index {
 public:
     /**
      * @brief Device pointer to flat sorted array of all candidate indices.
@@ -43,7 +43,7 @@ public:
     /**
      * @brief Default constructor
      */
-    RPLSHIndex()
+    Index()
         : all_candidate_indices(nullptr), all_bucket_signatures(nullptr),
           bucket_candidate_offsets(nullptr), table_bucket_offsets(nullptr), n_total_buckets(0),
           n_hash_tables(0), n_projections(0) {}
@@ -51,12 +51,12 @@ public:
     /**
      * @brief Destructor
      */
-    ~RPLSHIndex() { free_device_memory(); }
+    ~Index() { free_device_memory(); }
 
     /**
      * @brief Move constructor
      */
-    RPLSHIndex(RPLSHIndex&& other) noexcept
+    Index(Index&& other) noexcept
         : all_candidate_indices(other.all_candidate_indices),
           all_bucket_signatures(other.all_bucket_signatures),
           bucket_candidate_offsets(other.bucket_candidate_offsets),
@@ -76,7 +76,7 @@ public:
     /**
      * @brief Move assignment operator
      */
-    RPLSHIndex& operator=(RPLSHIndex&& other) noexcept {
+    Index& operator=(Index&& other) noexcept {
         if (this != &other) {
             free_device_memory();
 
@@ -103,12 +103,12 @@ public:
     /**
      * @brief Delete copy constructor
      */
-    RPLSHIndex(const RPLSHIndex&) = delete;
+    Index(const Index&) = delete;
 
     /**
      * @brief Delete copy assignment operator
      */
-    RPLSHIndex& operator=(const RPLSHIndex&) = delete;
+    Index& operator=(const Index&) = delete;
 
     /**
      * @brief Check empty

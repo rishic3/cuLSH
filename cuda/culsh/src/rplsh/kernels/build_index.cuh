@@ -6,9 +6,9 @@
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_scan.cuh>
 #include <cub/device/device_select.cuh>
-#include <thrust/sequence.h>
-#include <thrust/execution_policy.h>
 #include <cuda_runtime.h>
+#include <thrust/execution_policy.h>
+#include <thrust/sequence.h>
 
 namespace culsh {
 namespace rplsh {
@@ -32,8 +32,8 @@ __global__ void extract_byte_key_kernel(const int8_t* X_sig, const uint32_t* ite
     uint32_t row_id = original_item_idx % n_samples;
 
     // get pointer to original signature in X_sig
-    const int8_t* sig_ptr =
-        X_sig + table_id * (static_cast<size_t>(n_samples) * n_projections) + row_id * n_projections;
+    const int8_t* sig_ptr = X_sig + table_id * (static_cast<size_t>(n_samples) * n_projections) +
+                            row_id * n_projections;
 
     d_keys[idx] = static_cast<uint8_t>(sig_ptr[byte_idx]);
 }
@@ -54,7 +54,7 @@ __global__ void extract_table_id_key_kernel(const uint32_t* item_indices, int n_
 /**
  * @brief Check if two signatures are equal
  */
-__device__ bool are_signatures_equal(const int8_t* sig1, const int8_t* sig2, int n) {
+ __device__ bool are_signatures_equal(const int8_t* sig1, const int8_t* sig2, int n) {
     for (int i = 0; i < n; ++i) {
         if (sig1[i] != sig2[i])
             return false;
@@ -88,25 +88,25 @@ __global__ void mark_boundaries_kernel(const int8_t* X_sig, const uint32_t* sort
     uint32_t table_id_prev = orig_idx_prev / n_samples;
 
     // if table id changed, mark new table
-    d_table_flags[idx] = (table_id_curr != table_id_prev) ? 1 : 0;
+    int table_changed = (table_id_curr != table_id_prev);
 
-    if (d_table_flags[idx] == 1) {
-        // new table means new bucket
-        d_bucket_flags[idx] = 1;
-    } else {
+    int signature_changed = 0;
+    if (!table_changed) {
         // check if signature changed from prev to curr
         uint32_t row_id_curr = orig_idx_curr % n_samples;
         uint32_t row_id_prev = orig_idx_prev % n_samples;
-        const int8_t* sig_ptr_curr = X_sig +
-                                     table_id_curr * (static_cast<size_t>(n_samples) * n_projections) +
-                                     row_id_curr * n_projections;
-        const int8_t* sig_ptr_prev = X_sig +
-                                     table_id_prev * (static_cast<size_t>(n_samples) * n_projections) +
-                                     row_id_prev * n_projections;
+        const int8_t* sig_ptr_curr =
+            X_sig + table_id_curr * (static_cast<size_t>(n_samples) * n_projections) +
+            row_id_curr * n_projections;
+        const int8_t* sig_ptr_prev =
+            X_sig + table_id_prev * (static_cast<size_t>(n_samples) * n_projections) +
+            row_id_prev * n_projections;
         // if signature changed, mark new bucket
-        d_bucket_flags[idx] =
-            are_signatures_equal(sig_ptr_curr, sig_ptr_prev, n_projections) ? 0 : 1;
+        signature_changed = !are_signatures_equal(sig_ptr_curr, sig_ptr_prev, n_projections);
     }
+
+    d_table_flags[idx] = table_changed;
+    d_bucket_flags[idx] = table_changed | signature_changed;
 }
 
 /**
@@ -155,13 +155,14 @@ __global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* so
 /**
  * @brief Build flat LSH index structure on GPU
  * @param[in] stream CUDA stream
- * @param[in] X_sig int8_t signature matrix (n_samples x n_hash_tables * n_projections)
+ * @param[in] X_sig signature matrix (n_samples x n_hash_tables * n_projections)
  * @param[in] n_samples Number of input rows
  * @param[in] n_hash_tables Number of hash tables
  * @param[in] n_projections Number of projections
- * @return RPLSHIndex Index.
+ * @param[out] index Device index
  */
-RPLSHIndex build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_hash_tables, int n_projections) {
+Index build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_hash_tables,
+                  int n_projections) {
     size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
     dim3 block_size(256);
     dim3 grid_size((n_items + block_size.x - 1) / block_size.x);
@@ -190,7 +191,7 @@ RPLSHIndex build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, 
 
     // sort items lexicographically by signature, from least -> most significant signature byte
     for (int byte_idx = n_projections - 1; byte_idx >= 0; --byte_idx) {
-        // extract nth byte for each item from corresponding signature in X_sig 
+        // extract nth byte for each item from corresponding signature in X_sig
         extract_byte_key_kernel<<<grid_size, block_size, 0, stream>>>(
             X_sig, d_item_indices, n_samples, n_hash_tables, n_projections, byte_idx, d_keys);
         cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, d_keys, d_temp_keys,
@@ -214,7 +215,7 @@ RPLSHIndex build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, 
         d_table_flags);
 
     // initialize index
-    RPLSHIndex index;
+    Index index;
     index.n_hash_tables = n_hash_tables;
     index.n_projections = n_projections;
     CUDA_CHECK(cudaMalloc(&index.table_bucket_offsets, (n_hash_tables + 1) * sizeof(int)));
@@ -245,7 +246,8 @@ RPLSHIndex build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, 
                                n_items, stream);
 
     // get total number of unique buckets:
-    // last_bucket_idx_val (buckets seen before last item) + last_bucket_flag_val (whether last bucket is new bucket)
+    // last_bucket_idx_val (buckets seen before last item) + last_bucket_flag_val (whether last
+    // bucket is new bucket)
     int last_bucket_idx_val, last_bucket_flag_val;
     CUDA_CHECK(cudaMemcpyAsync(&last_bucket_idx_val, d_bucket_scan + (n_items - 1), sizeof(int),
                                cudaMemcpyDeviceToHost, stream));
@@ -256,8 +258,10 @@ RPLSHIndex build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, 
 
     // allocate all_candidate_indices - original row idx for all items in sorted order
     CUDA_CHECK(cudaMalloc(&index.all_candidate_indices, n_items * sizeof(int)));
-    // allocate bucket_candidate_offsets - start idx of each bucket's candidate indices in all_candidate_indices
-    CUDA_CHECK(cudaMalloc(&index.bucket_candidate_offsets, (index.n_total_buckets + 1) * sizeof(int)));
+    // allocate bucket_candidate_offsets - start idx of each bucket's candidate indices in
+    // all_candidate_indices
+    CUDA_CHECK(
+        cudaMalloc(&index.bucket_candidate_offsets, (index.n_total_buckets + 1) * sizeof(int)));
     // allocate all_bucket_signatures - signature for all buckets in sorted order
     CUDA_CHECK(cudaMalloc(&index.all_bucket_signatures, static_cast<size_t>(index.n_total_buckets) *
                                                             n_projections * sizeof(int8_t)));
@@ -265,9 +269,11 @@ RPLSHIndex build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, 
     // set terminating values in offset arrays
     int n_items_int = static_cast<int>(n_items);
     CUDA_CHECK(cudaMemcpyAsync(index.table_bucket_offsets + n_hash_tables, &index.n_total_buckets,
-                               sizeof(int), cudaMemcpyHostToDevice, stream));  // for table_bucket_offsets, set total number of buckets
+                               sizeof(int), cudaMemcpyHostToDevice,
+                               stream)); // for table_bucket_offsets, set total number of buckets
     CUDA_CHECK(cudaMemcpyAsync(index.bucket_candidate_offsets + index.n_total_buckets, &n_items_int,
-                               sizeof(int), cudaMemcpyHostToDevice, stream));  // for bucket_candidate_offsets, set total number of items
+                               sizeof(int), cudaMemcpyHostToDevice,
+                               stream)); // for bucket_candidate_offsets, set total number of items
 
     // scatter sorted data into final flat index
     build_final_index_kernel<<<grid_size, block_size, 0, stream>>>(
@@ -275,7 +281,7 @@ RPLSHIndex build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, 
         n_projections, n_items, index.all_bucket_signatures, index.bucket_candidate_offsets,
         index.all_candidate_indices);
 
-    // cleanup
+    // cleanup temp stuff
     CUDA_CHECK(cudaFree(d_temp_storage));
     CUDA_CHECK(cudaFree(d_item_indices));
     CUDA_CHECK(cudaFree(d_temp_indices));

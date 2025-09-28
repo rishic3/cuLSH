@@ -33,6 +33,17 @@ set_target_properties(culsh_lib PROPERTIES
 add_executable(main culsh/src/main.cu)
 target_link_libraries(main culsh_lib)
 
+# benchmark
+add_executable(benchmark benchmark/bench.cu)
+target_include_directories(benchmark PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/culsh/src
+)
+target_link_libraries(benchmark
+    CUDA::curand
+    CUDA::cudart
+    CUDA::cublas
+)
+
 # build type
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")

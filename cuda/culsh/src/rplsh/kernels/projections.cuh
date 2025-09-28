@@ -25,7 +25,7 @@ __global__ void normalize_vectors_kernel(int n_samples, int n_features, DType* P
     // store partial sum of squares for each thread
     extern __shared__ char sdata_raw[];
     DType* sdata =
-        reinterpret_cast<DType*>(sdata_raw); // must cast to templatized type to avoid compile error
+        reinterpret_cast<DType*>(sdata_raw); // can't directly initialize with template type
 
     unsigned int tid = threadIdx.x;
 
@@ -84,12 +84,11 @@ void generate_random_projections(cudaStream_t stream, int n_samples, int n_featu
     }
 
     // launch row-wise norm kernel
-    int block_size = std::min(n_features, 1024);
+    int block_size = std::min(n_features, 256);
     int smem_size = block_size * sizeof(DType);
     normalize_vectors_kernel<DType>
         <<<n_samples, block_size, smem_size, stream>>>(n_samples, n_features, P);
 
-    CUDA_CHECK(cudaStreamSynchronize(stream)); // TODO: - remove this sync?
     CURAND_CHECK(curandDestroyGenerator(rng));
 }
 
