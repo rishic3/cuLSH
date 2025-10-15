@@ -121,53 +121,61 @@ __global__ void aggregate_query_results_kernel(const int* candidate_counts, int 
 }
 
 /**
+ * @brief Precompute per-(query, table) exclusive offsets for candidate copies
+ */
+__global__ void compute_table_prefix_offsets_kernel(const int* candidate_counts, int n_queries,
+                                                    int n_hash_tables,
+                                                    size_t* table_prefix_offsets) {
+    int query_id = static_cast<int>(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (query_id >= n_queries)
+        return;
+
+    // for each query, compute exclusive prefix over tables t
+    size_t running = 0;
+    for (int table_id = 0; table_id < n_hash_tables; ++table_id) {
+        size_t idx = static_cast<size_t>(query_id) * n_hash_tables + table_id;
+        table_prefix_offsets[idx] = running;
+        running += static_cast<size_t>(candidate_counts[idx]);
+    }
+}
+
+/**
  * @brief Collect candidates into final output array
  */
 __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
                                           const int* all_candidate_indices,
                                           const int* matched_bucket_indices,
-                                          const size_t* query_candidate_offsets, int n_queries,
+                                          const size_t* query_candidate_offsets,
+                                          const size_t* table_prefix_offsets, int n_queries,
                                           int n_hash_tables, int* output_candidates) {
-    size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    // one 32-thread warp handles one (query, table) pair
+    int lane = threadIdx.x & 31;
+    int warps_per_block = blockDim.x >> 5;
+    size_t pair_index = static_cast<size_t>(blockIdx.x) * warps_per_block + (threadIdx.x >> 5);
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
-    if (idx >= n_items)
+    if (pair_index >= n_items)
         return;
 
-    int query_idx = idx / n_hash_tables;
-    int table_idx = idx % n_hash_tables;
-    int matched_bucket = matched_bucket_indices[idx];
+    int query_idx = static_cast<int>(pair_index / n_hash_tables);
+    int table_idx = static_cast<int>(pair_index % n_hash_tables);
+    int matched_bucket = matched_bucket_indices[pair_index];
 
     if (matched_bucket == -1)
         return;
 
-    // get bucket candidates
     int bucket_start = bucket_candidate_offsets[matched_bucket];
     int bucket_end = bucket_candidate_offsets[matched_bucket + 1];
     int bucket_size = bucket_end - bucket_start;
-
-    if (bucket_size == 0)
+    if (bucket_size <= 0)
         return;
 
-    // find write position in output array
-    size_t query_offset = query_candidate_offsets[query_idx];
+    size_t base_out = query_candidate_offsets[query_idx] +
+                      table_prefix_offsets[static_cast<size_t>(query_idx) * n_hash_tables +
+                                          table_idx];
 
-    // calculate offset within this query's candidates
-    // (sum candidates from previous tables)
-    int table_offset = 0;
-    for (int prev_table = 0; prev_table < table_idx; ++prev_table) {
-        size_t prev_idx = static_cast<size_t>(query_idx) * n_hash_tables + prev_table;
-        int prev_matched_bucket = matched_bucket_indices[prev_idx];
-        if (prev_matched_bucket != -1) {
-            int prev_start = bucket_candidate_offsets[prev_matched_bucket];
-            int prev_end = bucket_candidate_offsets[prev_matched_bucket + 1];
-            table_offset += prev_end - prev_start;
-        }
-    }
-
-    // copy candidates into output
-    for (int i = 0; i < bucket_size; ++i) {
-        output_candidates[static_cast<size_t>(query_offset) + table_offset + i] =
-            all_candidate_indices[bucket_start + i];
+    // stride by warp size for contiguous w/r
+    for (int i = lane; i < bucket_size; i += 32) {
+        output_candidates[base_out + i] = all_candidate_indices[bucket_start + i];
     }
 }
 
@@ -213,7 +221,14 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     aggregate_query_results_kernel<<<grid_size_queries, block_size, 0, stream>>>(
         d_candidate_counts, n_queries, n_hash_tables, candidates.query_candidate_counts);
 
-    // compute prefix sum for query offsets using CUB
+    // precompute per-(query, table) write offsets
+    size_t* d_table_prefix_offsets;
+    CUDA_CHECK(
+        cudaMalloc(&d_table_prefix_offsets, static_cast<size_t>(n_queries) * n_hash_tables * sizeof(size_t)));
+    compute_table_prefix_offsets_kernel<<<grid_size_queries, block_size, 0, stream>>>(
+        d_candidate_counts, n_queries, n_hash_tables, d_table_prefix_offsets);
+
+    // compute prefix sum for query offsets
     void* d_temp_storage = nullptr;
     size_t temp_storage_bytes = 0;
     cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes,
@@ -247,17 +262,20 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     if (total_candidates > 0) {
         CUDA_CHECK(cudaMalloc(&candidates.query_candidate_indices, total_candidates * sizeof(int)));
 
-        // collect candidates into final output array
-        collect_candidates_kernel<<<grid_size_items, block_size, 0, stream>>>(
+        // collect candidates (each warp handles one (query, table) pair)
+        int warps_per_block = block_size.x >> 5;
+        dim3 grid_size_pairs((n_items + warps_per_block - 1) / warps_per_block);
+        collect_candidates_kernel<<<grid_size_pairs, block_size, 0, stream>>>(
             index->bucket_candidate_offsets, index->all_candidate_indices,
-            d_matched_bucket_indices, candidates.query_candidate_offsets, n_queries,
-            n_hash_tables, candidates.query_candidate_indices);
+            d_matched_bucket_indices, candidates.query_candidate_offsets, d_table_prefix_offsets,
+            n_queries, n_hash_tables, candidates.query_candidate_indices);
     } else {
         candidates.query_candidate_indices = nullptr;
     }
 
     // cleanup
     CUDA_CHECK(cudaFree(d_temp_storage));
+    CUDA_CHECK(cudaFree(d_table_prefix_offsets));
     CUDA_CHECK(cudaFree(d_matched_bucket_indices));
     CUDA_CHECK(cudaFree(d_candidate_counts));
 
