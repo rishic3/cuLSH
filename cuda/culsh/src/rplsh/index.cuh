@@ -7,7 +7,7 @@ namespace culsh {
 namespace rplsh {
 
 /**
- * @brief Managed GPU LSH index.
+ * @brief GPU LSH index with RAII semantics
  */
 class Index {
 public:
@@ -120,7 +120,7 @@ public:
     }
 
     /**
-     * @brief Compute the total device memory size of index
+     * @brief Compute total device memory size of index
      */
     size_t device_size() const {
         if (empty()) {

@@ -113,7 +113,7 @@ __global__ void aggregate_query_results_kernel(const int* candidate_counts, int 
     // sum candidates across all tables for this query
     size_t total_candidates = 0;
     for (int table_id = 0; table_id < n_hash_tables; ++table_id) {
-        size_t idx = static_cast<size_t>(query_id) * n_hash_tables + table_id;  // shift to this query's table
+        size_t idx = static_cast<size_t>(query_id) * n_hash_tables + table_id;
         total_candidates += candidate_counts[idx];
     }
 
@@ -151,8 +151,8 @@ __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
     // find write position in output array
     size_t query_offset = query_candidate_offsets[query_idx];
 
-    // Calculate offset within this query's candidates
-    // Need to sum candidates from previous tables for this query
+    // calculate offset within this query's candidates
+    // (sum candidates from previous tables)
     int table_offset = 0;
     for (int prev_table = 0; prev_table < table_idx; ++prev_table) {
         size_t prev_idx = static_cast<size_t>(query_idx) * n_hash_tables + prev_table;
@@ -213,7 +213,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     aggregate_query_results_kernel<<<grid_size_queries, block_size, 0, stream>>>(
         d_candidate_counts, n_queries, n_hash_tables, candidates.query_candidate_counts);
 
-    // Compute prefix sum for query offsets using CUB
+    // compute prefix sum for query offsets using CUB
     void* d_temp_storage = nullptr;
     size_t temp_storage_bytes = 0;
     cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes,
@@ -224,7 +224,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
                                   candidates.query_candidate_counts,
                                   candidates.query_candidate_offsets, n_queries, stream);
 
-    // Get total number of candidates to allocate final array
+    // allocate total candidates
     size_t total_candidates_offset;
     size_t last_query_count;
     CUDA_CHECK(cudaMemcpyAsync(&total_candidates_offset,
@@ -240,15 +240,14 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     printf("Total candidates: %zu (%.2f GB)\n", 
            total_candidates, (double)total_candidates * sizeof(int) / (1024.0*1024.0*1024.0));
 
-    // Set terminating value in offsets array  
+    // set terminating value in offsets
     CUDA_CHECK(cudaMemcpyAsync(candidates.query_candidate_offsets + n_queries, &total_candidates,
                                sizeof(size_t), cudaMemcpyHostToDevice, stream));
 
-    // Allocate final output array
     if (total_candidates > 0) {
         CUDA_CHECK(cudaMalloc(&candidates.query_candidate_indices, total_candidates * sizeof(int)));
 
-        // Step 4: Collect candidates into final output array
+        // collect candidates into final output array
         collect_candidates_kernel<<<grid_size_items, block_size, 0, stream>>>(
             index->bucket_candidate_offsets, index->all_candidate_indices,
             d_matched_bucket_indices, candidates.query_candidate_offsets, n_queries,
@@ -257,7 +256,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
         candidates.query_candidate_indices = nullptr;
     }
 
-    // Cleanup temporary storage
+    // cleanup
     CUDA_CHECK(cudaFree(d_temp_storage));
     CUDA_CHECK(cudaFree(d_matched_bucket_indices));
     CUDA_CHECK(cudaFree(d_candidate_counts));

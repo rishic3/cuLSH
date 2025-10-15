@@ -7,7 +7,7 @@ namespace culsh {
 namespace rplsh {
 
 /**
- * @brief Managed candidates results.
+ * @brief GPU candidates results with RAII semantics
  */
 class Candidates {
 public:
