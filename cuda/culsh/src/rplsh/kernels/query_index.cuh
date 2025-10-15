@@ -16,13 +16,7 @@ namespace rplsh {
 namespace detail {
 
 /**
- * @brief Performs a binary search to find a query signature within a single table's sorted bucket
- * list.
- *
- * @param index The complete LSH index.
- * @param table_j The hash table to search within.
- * @param q_table_sig The query signature for this table.
- * @return The compact index of the found bucket, or -1 if not found.
+ * @brief Binary search for query signature amongst buckets of a hash table
  */
 __device__ int find_bucket_in_table(const int8_t* all_bucket_signatures, int table_start,
                                     int table_end, const int8_t* query_sig, int n_projections) {
@@ -100,19 +94,18 @@ __global__ void count_candidates_kernel(const int* bucket_candidate_offsets,
     if (matched_bucket == -1) {
         candidate_counts[idx] = 0;
     } else {
-        // start and end of bucket's candidates in all_candidate_indices
+        // get start and end of bucket's candidates in all_candidate_indices
         int start = bucket_candidate_offsets[matched_bucket];
         int end = bucket_candidate_offsets[matched_bucket + 1];
-        candidate_counts[idx] = end - start;
+        candidate_counts[idx] = end - start;  // num candidates = size of that range
     }
 }
 
 /**
- * @brief Aggregate candidates per query and compute offsets
+ * @brief Aggregate candidates per query across all tables
  */
 __global__ void aggregate_query_results_kernel(const int* candidate_counts, int n_queries,
-                                               int n_hash_tables, size_t* query_candidate_counts,
-                                               size_t* query_candidate_offsets) {
+                                               int n_hash_tables, size_t* query_candidate_counts) {
     int query_id = static_cast<int>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (query_id >= n_queries)
         return;
@@ -120,7 +113,7 @@ __global__ void aggregate_query_results_kernel(const int* candidate_counts, int 
     // sum candidates across all tables for this query
     size_t total_candidates = 0;
     for (int table_id = 0; table_id < n_hash_tables; ++table_id) {
-        size_t idx = static_cast<size_t>(query_id) * n_hash_tables + table_id;
+        size_t idx = static_cast<size_t>(query_id) * n_hash_tables + table_id;  // shift to this query's table
         total_candidates += candidate_counts[idx];
     }
 
@@ -145,9 +138,9 @@ __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
     int matched_bucket = matched_bucket_indices[idx];
 
     if (matched_bucket == -1)
-        return; // No candidates for this (query, table) pair
+        return;
 
-    // Get bucket candidates
+    // get bucket candidates
     int bucket_start = bucket_candidate_offsets[matched_bucket];
     int bucket_end = bucket_candidate_offsets[matched_bucket + 1];
     int bucket_size = bucket_end - bucket_start;
@@ -155,7 +148,7 @@ __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
     if (bucket_size == 0)
         return;
 
-    // Find write position in output array
+    // find write position in output array
     size_t query_offset = query_candidate_offsets[query_idx];
 
     // Calculate offset within this query's candidates
@@ -171,7 +164,7 @@ __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
         }
     }
 
-    // Copy candidates
+    // copy candidates into output
     for (int i = 0; i < bucket_size; ++i) {
         output_candidates[static_cast<size_t>(query_offset) + table_offset + i] =
             all_candidate_indices[bucket_start + i];
@@ -216,10 +209,9 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     CUDA_CHECK(cudaMalloc(&candidates.query_candidate_counts, n_queries * sizeof(size_t)));
     CUDA_CHECK(cudaMalloc(&candidates.query_candidate_offsets, (n_queries + 1) * sizeof(size_t)));
 
-    // aggregate candidates per query
+    // for each query, sum candidates across all tables
     aggregate_query_results_kernel<<<grid_size_queries, block_size, 0, stream>>>(
-        d_candidate_counts, n_queries, n_hash_tables, candidates.query_candidate_counts,
-        candidates.query_candidate_offsets);
+        d_candidate_counts, n_queries, n_hash_tables, candidates.query_candidate_counts);
 
     // Compute prefix sum for query offsets using CUB
     void* d_temp_storage = nullptr;
@@ -245,7 +237,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     
     size_t total_candidates = total_candidates_offset + last_query_count;
     
-    printf("DEBUG: Total candidates: %zu (%.2f GB)\n", 
+    printf("Total candidates: %zu (%.2f GB)\n", 
            total_candidates, (double)total_candidates * sizeof(int) / (1024.0*1024.0*1024.0));
 
     // Set terminating value in offsets array  

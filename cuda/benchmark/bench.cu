@@ -208,6 +208,7 @@ culsh::rplsh::Candidates cuda_query(cublasHandle_t cublas_handle, cudaStream_t s
 
 struct Config {
     fs::path data_dir = "/home/rishic/Code/cu-lsh/data/sift";
+    fs::path save_dir = "results";
     int n_hash_tables = 16;
     int n_projections = 4;
     unsigned int seed = random_device{}();
@@ -221,7 +222,8 @@ void print_usage(const char* program_name) {
          << "  -h, --n-hash-tables   Number of hash tables (default: 16)\n"
          << "  -p, --n-projections   Number of projections per table (default: 4)\n"
          << "  -s, --seed            Random seed (default: random)\n"
-         << "  -q, --num-queries     Number of test queries (default: 100)\n";
+         << "  -q, --num-queries     Number of test queries (default: 100)\n"
+         << "  -o, --save-dir        Save directory for results (default: results)\n";
 }
 
 Config parse_args(int argc, char* argv[]) {
@@ -251,6 +253,9 @@ Config parse_args(int argc, char* argv[]) {
         case 'q':
             conf.n_queries = atoi(optarg);
             break;
+        case 'o':
+            conf.save_dir = optarg;
+            break;
         default:
             print_usage(argv[0]);
             exit(1);
@@ -267,7 +272,7 @@ int main(int argc, char* argv[]) {
     CUDA_CHECK(cudaGetDeviceProperties(&prop, 0));
     cout << "Using GPU: " << prop.name << endl;
     cout << "Compute Capability: " << prop.major << "." << prop.minor << endl;
-    cout << "Global Memory: " << prop.totalGlobalMem / (1024 * 1024) << " MB\n" << endl;
+    cout << "Global Memory: " << prop.totalGlobalMem / (1024 * 1024) << " MB" << endl;
     cout << endl;
 
     Config conf = parse_args(argc, argv);
@@ -292,8 +297,6 @@ int main(int argc, char* argv[]) {
     int n_test_queries = min(conf.n_queries, n_queries_data);
     cout << "Using " << n_test_queries << " test queries" << endl;
 
-    
-
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream));
 
@@ -314,7 +317,9 @@ int main(int argc, char* argv[]) {
                                          conf.n_hash_tables, conf.n_projections, conf.seed, &P);
     auto fit_time = chrono::high_resolution_clock::now() - start_time;
     auto fit_seconds = chrono::duration_cast<chrono::duration<double>>(fit_time).count();
-    cout << "CUDA fit() completed in " << fit_seconds << "s" << endl << endl;
+    cout << "-> CUDA fit() completed in " << fit_seconds << "s" << endl << endl;
+
+    cout << "Index size: " << index.device_size() / (1024 * 1024) << " MB" << endl;
 
     // query
     cout << "Running CUDA query()..." << endl;
@@ -324,7 +329,7 @@ int main(int argc, char* argv[]) {
                    conf.n_projections, P, &index);
     auto query_time = chrono::high_resolution_clock::now() - start_time;
     auto query_seconds = chrono::duration_cast<chrono::duration<double>>(query_time).count();
-    cout << "CUDA query() completed in " << query_seconds << "s" << endl << endl;
+    cout << "-> CUDA query() completed in " << query_seconds << "s" << endl << endl;
 
     // calculate recall for first query
     double recall_score = 0.0;
@@ -372,15 +377,16 @@ int main(int argc, char* argv[]) {
     }
 
     // save report
-    if (!fs::create_directories("results") && !fs::exists("results")) {
-        throw runtime_error("Failed to create results directory");
+    if (!fs::create_directories(conf.save_dir) && !fs::exists(conf.save_dir)) {
+        throw runtime_error("Failed to create save directory: " + conf.save_dir.string());
     }
     auto now = chrono::system_clock::now();
     auto time_t = chrono::system_clock::to_time_t(now);
     stringstream ss;
     ss << put_time(localtime(&time_t), "%Y%m%d_%H%M%S");
-    string report_path = "results/report_h" + to_string(conf.n_hash_tables) + "_p" +
+    string report_filename = "report_h" + to_string(conf.n_hash_tables) + "_p" +
                          to_string(conf.n_projections) + "_" + ss.str() + ".json";
+    fs::path report_path = conf.save_dir / report_filename;
 
     ofstream report(report_path);
     report << "{\n";
@@ -402,7 +408,7 @@ int main(int argc, char* argv[]) {
     report << "}\n";
     report.close();
 
-    cout << "Report saved to " << report_path << endl;
+    cout << "Report saved to " << report_path.string() << endl;
 
     // cleanup CUDA resources
     CUDA_CHECK(cudaFree(P));

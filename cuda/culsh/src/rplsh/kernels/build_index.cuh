@@ -218,6 +218,7 @@ Index build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n
     Index index;
     index.n_hash_tables = n_hash_tables;
     index.n_projections = n_projections;
+    index.n_total_candidates = static_cast<int>(n_items);
     CUDA_CHECK(cudaMalloc(&index.table_bucket_offsets, (n_hash_tables + 1) * sizeof(int)));
 
     // run exclusive sum to get bucket offsets from binary flags, e.g.

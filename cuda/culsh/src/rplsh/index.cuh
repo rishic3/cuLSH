@@ -36,6 +36,7 @@ public:
     /**
      * @brief Metadata
      */
+    int n_total_candidates;
     int n_total_buckets;
     int n_hash_tables;
     int n_projections;
@@ -116,6 +117,27 @@ public:
     bool empty() const {
         return all_candidate_indices == nullptr && all_bucket_signatures == nullptr &&
                bucket_candidate_offsets == nullptr && table_bucket_offsets == nullptr;
+    }
+
+    /**
+     * @brief Compute the total device memory size of index
+     */
+    size_t device_size() const {
+        if (empty()) {
+            return 0;
+        }
+
+        size_t total_size_bytes = 0;
+        // bucket_candidate_offsets
+        total_size_bytes += (n_total_buckets + 1) * sizeof(int);
+        // table_bucket_offsets
+        total_size_bytes += (n_hash_tables + 1) * sizeof(int);
+        // all_bucket_signatures
+        total_size_bytes += n_total_buckets * n_projections * sizeof(int8_t);
+        // all_candidate_indices
+        total_size_bytes += n_total_candidates * sizeof(int);
+
+        return total_size_bytes;
     }
 
 private:
