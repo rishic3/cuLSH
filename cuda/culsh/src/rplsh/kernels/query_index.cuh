@@ -148,7 +148,7 @@ __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
                                           const size_t* query_candidate_offsets,
                                           const size_t* table_prefix_offsets, int n_queries,
                                           int n_hash_tables, int* output_candidates) {
-    // one 32-thread warp handles one (query, table) pair
+    // one warp per (query, table) pair
     int lane = threadIdx.x & 31;
     int warps_per_block = blockDim.x >> 5;
     size_t pair_index = static_cast<size_t>(blockIdx.x) * warps_per_block + (threadIdx.x >> 5);
@@ -156,24 +156,26 @@ __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
     if (pair_index >= n_items)
         return;
 
+    // load matched bucket id for query
     int query_idx = static_cast<int>(pair_index / n_hash_tables);
     int table_idx = static_cast<int>(pair_index % n_hash_tables);
     int matched_bucket = matched_bucket_indices[pair_index];
-
     if (matched_bucket == -1)
         return;
 
+    // get bucket span from bucket offsets in candidates array
     int bucket_start = bucket_candidate_offsets[matched_bucket];
     int bucket_end = bucket_candidate_offsets[matched_bucket + 1];
     int bucket_size = bucket_end - bucket_start;
     if (bucket_size <= 0)
         return;
 
+    // base idx to write candidates for this bucket
     size_t base_out = query_candidate_offsets[query_idx] +
                       table_prefix_offsets[static_cast<size_t>(query_idx) * n_hash_tables +
                                           table_idx];
 
-    // stride by warp size for contiguous w/r
+    // stride by warp size for coalesced access
     for (int i = lane; i < bucket_size; i += 32) {
         output_candidates[base_out + i] = all_candidate_indices[bucket_start + i];
     }
