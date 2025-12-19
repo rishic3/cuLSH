@@ -266,7 +266,7 @@ Config parse_args(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
-    
+
     // setup CUDA
     cudaDeviceProp prop;
     CUDA_CHECK(cudaGetDeviceProperties(&prop, 0));
@@ -385,7 +385,7 @@ int main(int argc, char* argv[]) {
     stringstream ss;
     ss << put_time(localtime(&time_t), "%Y%m%d_%H%M%S");
     string report_filename = "report_h" + to_string(conf.n_hash_tables) + "_p" +
-                         to_string(conf.n_projections) + "_" + ss.str() + ".json";
+                             to_string(conf.n_projections) + "_" + ss.str() + ".json";
     fs::path report_path = conf.save_dir / report_filename;
 
     ofstream report(report_path);

@@ -21,7 +21,8 @@ namespace detail {
 __device__ int find_bucket_in_table(const int8_t* all_bucket_signatures, int table_start,
                                     int table_end, const int8_t* query_sig, int n_projections) {
 
-    if (table_start >= table_end) return -1;
+    if (table_start >= table_end)
+        return -1;
 
     // binary search within table buckets
     int lo = table_start;
@@ -50,10 +51,10 @@ __device__ int find_bucket_in_table(const int8_t* all_bucket_signatures, int tab
 /**
  * @brief Find matching bucket for each (query, table) pair
  */
-__global__ void find_matching_buckets_kernel(const int8_t* Q_sig, 
+__global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
                                              const int8_t* all_bucket_signatures,
-                                             const int* table_bucket_offsets,
-                                             int n_queries, int n_hash_tables, int n_projections,
+                                             const int* table_bucket_offsets, int n_queries,
+                                             int n_hash_tables, int n_projections,
                                              int* matched_bucket_indices) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
@@ -64,8 +65,7 @@ __global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
     int table_idx = idx % n_hash_tables;
 
     // get pointer to query signature in Q_sig
-    const int8_t* query_sig = Q_sig + 
-                              static_cast<size_t>(table_idx) * (n_queries * n_projections) +
+    const int8_t* query_sig = Q_sig + static_cast<size_t>(table_idx) * (n_queries * n_projections) +
                               static_cast<size_t>(query_idx) * n_projections;
 
     // start and end of table's buckets in all_bucket_signatures
@@ -82,9 +82,9 @@ __global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
 /**
  * @brief Count candidates for each (query, table) pair
  */
-__global__ void count_candidates_kernel(const int* bucket_candidate_offsets, 
-                                        const int* matched_bucket_indices,
-                                        int n_queries, int n_hash_tables, int* candidate_counts) {
+__global__ void count_candidates_kernel(const int* bucket_candidate_offsets,
+                                        const int* matched_bucket_indices, int n_queries,
+                                        int n_hash_tables, int* candidate_counts) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
     if (idx >= n_items)
@@ -97,7 +97,7 @@ __global__ void count_candidates_kernel(const int* bucket_candidate_offsets,
         // get start and end of bucket's candidates in all_candidate_indices
         int start = bucket_candidate_offsets[matched_bucket];
         int end = bucket_candidate_offsets[matched_bucket + 1];
-        candidate_counts[idx] = end - start;  // num candidates = size of that range
+        candidate_counts[idx] = end - start; // num candidates = size of that range
     }
 }
 
@@ -171,9 +171,9 @@ __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
         return;
 
     // base idx to write candidates for this bucket
-    size_t base_out = query_candidate_offsets[query_idx] +
-                      table_prefix_offsets[static_cast<size_t>(query_idx) * n_hash_tables +
-                                          table_idx];
+    size_t base_out =
+        query_candidate_offsets[query_idx] +
+        table_prefix_offsets[static_cast<size_t>(query_idx) * n_hash_tables + table_idx];
 
     // stride by warp size for coalesced access
     for (int i = lane; i < bucket_size; i += 32) {
@@ -206,13 +206,13 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
 
     // find matching buckets for each (query, table)
     find_matching_buckets_kernel<<<grid_size_items, block_size, 0, stream>>>(
-        Q_sig, index->all_bucket_signatures, index->table_bucket_offsets,
-        n_queries, n_hash_tables, n_projections, d_matched_bucket_indices);
+        Q_sig, index->all_bucket_signatures, index->table_bucket_offsets, n_queries, n_hash_tables,
+        n_projections, d_matched_bucket_indices);
 
     // count candidate for each (query, table)
     count_candidates_kernel<<<grid_size_items, block_size, 0, stream>>>(
-        index->bucket_candidate_offsets, d_matched_bucket_indices, 
-        n_queries, n_hash_tables, d_candidate_counts);
+        index->bucket_candidate_offsets, d_matched_bucket_indices, n_queries, n_hash_tables,
+        d_candidate_counts);
 
     // initialize output candidates
     Candidates candidates;
@@ -225,8 +225,8 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
 
     // precompute per-(query, table) write offsets
     size_t* d_table_prefix_offsets;
-    CUDA_CHECK(
-        cudaMalloc(&d_table_prefix_offsets, static_cast<size_t>(n_queries) * n_hash_tables * sizeof(size_t)));
+    CUDA_CHECK(cudaMalloc(&d_table_prefix_offsets,
+                          static_cast<size_t>(n_queries) * n_hash_tables * sizeof(size_t)));
     compute_table_prefix_offsets_kernel<<<grid_size_queries, block_size, 0, stream>>>(
         d_candidate_counts, n_queries, n_hash_tables, d_table_prefix_offsets);
 
@@ -251,11 +251,11 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
                                candidates.query_candidate_counts + (n_queries - 1), sizeof(size_t),
                                cudaMemcpyDeviceToHost, stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    
+
     size_t total_candidates = total_candidates_offset + last_query_count;
-    
-    printf("Total candidates: %zu (%.2f GB)\n", 
-           total_candidates, (double)total_candidates * sizeof(int) / (1024.0*1024.0*1024.0));
+
+    printf("Total candidates: %zu (%.2f GB)\n", total_candidates,
+           (double)total_candidates * sizeof(int) / (1024.0 * 1024.0 * 1024.0));
 
     // set terminating value in offsets
     CUDA_CHECK(cudaMemcpyAsync(candidates.query_candidate_offsets + n_queries, &total_candidates,
@@ -268,9 +268,9 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
         int warps_per_block = block_size.x >> 5;
         dim3 grid_size_pairs((n_items + warps_per_block - 1) / warps_per_block);
         collect_candidates_kernel<<<grid_size_pairs, block_size, 0, stream>>>(
-            index->bucket_candidate_offsets, index->all_candidate_indices,
-            d_matched_bucket_indices, candidates.query_candidate_offsets, d_table_prefix_offsets,
-            n_queries, n_hash_tables, candidates.query_candidate_indices);
+            index->bucket_candidate_offsets, index->all_candidate_indices, d_matched_bucket_indices,
+            candidates.query_candidate_offsets, d_table_prefix_offsets, n_queries, n_hash_tables,
+            candidates.query_candidate_indices);
     } else {
         candidates.query_candidate_indices = nullptr;
     }

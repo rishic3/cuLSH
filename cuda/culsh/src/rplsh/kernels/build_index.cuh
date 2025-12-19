@@ -54,7 +54,7 @@ __global__ void extract_table_id_key_kernel(const uint32_t* item_indices, int n_
 /**
  * @brief Check if two signatures are equal
  */
- __device__ bool are_signatures_equal(const int8_t* sig1, const int8_t* sig2, int n) {
+__device__ bool are_signatures_equal(const int8_t* sig1, const int8_t* sig2, int n) {
     for (int i = 0; i < n; ++i) {
         if (sig1[i] != sig2[i])
             return false;

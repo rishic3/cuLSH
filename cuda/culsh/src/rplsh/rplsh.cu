@@ -136,6 +136,7 @@ Candidates query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, cons
     // TODO: Query index for candidate indices
     // TODO: Retrieve actual vectors from X_stored using indices
     // TODO: Return results in candidate_vectors and candidate_counts arrays
+    return Candidates();
 }
 
 Candidates query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
@@ -146,6 +147,7 @@ Candidates query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, cons
     // TODO: Query index for candidate indices (double precision)
     // TODO: Retrieve actual vectors from X_stored using indices (double precision)
     // TODO: Return results in candidate_vectors and candidate_counts arrays
+    return Candidates();
 }
 
 } // namespace rplsh
