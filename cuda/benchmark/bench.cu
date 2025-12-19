@@ -131,39 +131,33 @@ culsh::rplsh::Index cuda_fit(cublasHandle_t cublas_handle, cudaStream_t stream, 
 
     // allocate P on GPU
     float* P;
-    int n_total_buckets = n_hash_tables * n_projections;
-    CUDA_CHECK(cudaMalloc(&P, static_cast<size_t>(n_total_buckets) * n_features * sizeof(float)));
+    int n_total_projections = n_hash_tables * n_projections;
+    CUDA_CHECK(
+        cudaMalloc(&P, static_cast<size_t>(n_total_projections) * n_features * sizeof(float)));
 
     // allocate X_hash
     float* X_hash;
     CUDA_CHECK(
-        cudaMalloc(&X_hash, static_cast<size_t>(n_samples) * n_total_buckets * sizeof(float)));
+        cudaMalloc(&X_hash, static_cast<size_t>(n_samples) * n_total_projections * sizeof(float)));
 
     // generate random projections and hash X
-    culsh::rplsh::detail::generate_random_projections<float>(stream, n_total_buckets, n_features,
-                                                             seed, P);
+    culsh::rplsh::detail::generate_random_projections<float>(stream, n_total_projections,
+                                                             n_features, seed, P);
     culsh::rplsh::detail::hash<float>(cublas_handle, stream, X_gpu, P, n_samples, n_features,
                                       n_hash_tables, n_projections, X_hash);
 
-    // compute binary signatures from X_hash
-    int8_t* X_sig;
-    CUDA_CHECK(
-        cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * n_total_buckets * sizeof(int8_t)));
-    culsh::rplsh::detail::compute_signatures<float>(stream, X_hash, n_samples, n_hash_tables,
-                                                    n_projections, X_sig);
-    CUDA_CHECK(cudaFree(X_hash)); // done with X_hash
-
-    // build and return index
+    // build index directly from hash values
     auto index =
-        culsh::rplsh::detail::build_index(stream, X_sig, n_samples, n_hash_tables, n_projections);
-    CUDA_CHECK(cudaFree(X_sig));
+        culsh::rplsh::detail::build_index(stream, X_hash, n_samples, n_hash_tables, n_projections);
+
+    CUDA_CHECK(cudaFree(X_hash));
     CUDA_CHECK(cudaFree(X_gpu));
 
     *P_out = P; // return projections for later querying
     return index;
 }
 
-// CUDA query function (adapted from main.cu)
+// CUDA query function
 culsh::rplsh::Candidates cuda_query(cublasHandle_t cublas_handle, cudaStream_t stream,
                                     const float* Q_host, int n_queries, int n_features,
                                     int n_hash_tables, int n_projections, float* P,
@@ -176,32 +170,22 @@ culsh::rplsh::Candidates cuda_query(cublasHandle_t cublas_handle, cudaStream_t s
                           static_cast<size_t>(n_queries) * n_features * sizeof(float),
                           cudaMemcpyHostToDevice));
 
-    int n_total_buckets = n_hash_tables * n_projections;
+    int n_total_projections = n_hash_tables * n_projections;
 
     // allocate Q_hash
     float* Q_hash;
     CUDA_CHECK(
-        cudaMalloc(&Q_hash, static_cast<size_t>(n_queries) * n_total_buckets * sizeof(float)));
+        cudaMalloc(&Q_hash, static_cast<size_t>(n_queries) * n_total_projections * sizeof(float)));
 
     // hash queries
     culsh::rplsh::detail::hash<float>(cublas_handle, stream, Q_gpu, P, n_queries, n_features,
                                       n_hash_tables, n_projections, Q_hash);
     CUDA_CHECK(cudaFree(Q_gpu));
 
-    // allocate Q_sig
-    int8_t* Q_sig;
-    CUDA_CHECK(
-        cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * n_total_buckets * sizeof(int8_t)));
-
-    // convert hash values to signatures
-    culsh::rplsh::detail::compute_signatures<float>(stream, Q_hash, n_queries, n_hash_tables,
-                                                    n_projections, Q_sig);
-    CUDA_CHECK(cudaFree(Q_hash));
-
-    // query index
+    // query index directly with hash values
     culsh::rplsh::Candidates candidates = culsh::rplsh::detail::query_index(
-        stream, Q_sig, n_queries, n_hash_tables, n_projections, index);
-    CUDA_CHECK(cudaFree(Q_sig));
+        stream, Q_hash, n_queries, n_hash_tables, n_projections, index);
+    CUDA_CHECK(cudaFree(Q_hash));
 
     return candidates;
 }
@@ -266,7 +250,7 @@ Config parse_args(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
-    
+
     // setup CUDA
     cudaDeviceProp prop;
     CUDA_CHECK(cudaGetDeviceProperties(&prop, 0));
@@ -385,7 +369,7 @@ int main(int argc, char* argv[]) {
     stringstream ss;
     ss << put_time(localtime(&time_t), "%Y%m%d_%H%M%S");
     string report_filename = "report_h" + to_string(conf.n_hash_tables) + "_p" +
-                         to_string(conf.n_projections) + "_" + ss.str() + ".json";
+                             to_string(conf.n_projections) + "_" + ss.str() + ".json";
     fs::path report_path = conf.save_dir / report_filename;
 
     ofstream report(report_path);

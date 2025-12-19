@@ -11,55 +11,6 @@ namespace rplsh {
 namespace detail {
 
 /**
- * @brief Convert hashed input matrix to binary signatures, laid out contiguously per table.
- */
-template <typename DType>
-__global__ void compute_signatures_kernel(const DType* X_hash, int n_samples, int n_hash_tables,
-                                          int n_projections, int8_t* X_sig) {
-
-    // each thread computes one signature
-    size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-    size_t total_elements = static_cast<size_t>(n_samples) * n_hash_tables * n_projections;
-
-    if (idx >= total_elements)
-        return;
-
-    size_t proj_idx = idx % n_projections;
-    size_t table_idx = (idx / n_projections) % n_hash_tables;
-    size_t row_idx = idx / (n_projections * n_hash_tables);
-
-    // index of input hash
-    size_t hash_idx =
-        row_idx * (n_hash_tables * n_projections) + table_idx * n_projections + proj_idx;
-
-    // lay out signatures contiguously per table
-    size_t sig_idx = table_idx * (n_samples * n_projections) + row_idx * n_projections + proj_idx;
-
-    // convert to binary
-    // reinterpret as uint32, shift to sign bit, and invert (1 is pos, 0 is neg)
-    X_sig[sig_idx] = (__float_as_uint(X_hash[hash_idx]) >> 31) ^ 1;
-}
-
-/**
- * @brief Compute signatures from hashed input vectors.
- * @param[in] stream CUDA stream.
- * @param[in] X_hash Hashed input vectors (n_samples x n_hash_tables * n_projections).
- * @param[in] n_samples Number of input vectors.
- * @param[in] n_hash_tables Number of hash tables.
- * @param[in] n_projections Number of projections.
- * @param[out] X_sig Compressed output signatures (n_samples x n_hash_tables * n_projections).
- */
-template <typename DType>
-void compute_signatures(cudaStream_t stream, const DType* X_hash, int n_samples, int n_hash_tables,
-                        int n_projections, int8_t* X_sig) {
-    dim3 block_size(256);
-    size_t total_elements = static_cast<size_t>(n_samples) * n_hash_tables * n_projections;
-    dim3 grid_size((total_elements + block_size.x - 1) / block_size.x);
-    compute_signatures_kernel<<<grid_size, block_size, 0, stream>>>(
-        X_hash, n_samples, n_hash_tables, n_projections, X_sig);
-}
-
-/**
  * @brief Hash the input vectors X using random projection matrix P
  * @param[in] cublas_handle cuBLAS handle
  * @param[in] stream CUDA stream

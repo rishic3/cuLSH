@@ -2,297 +2,244 @@
 
 #include "../index.cuh"
 #include "../utils/utils.cuh"
+#include <cmath>
 #include <cstdint>
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_scan.cuh>
-#include <cub/device/device_select.cuh>
 #include <cuda_runtime.h>
+#include <thrust/binary_search.h>
+#include <thrust/copy.h>
 #include <thrust/execution_policy.h>
+#include <thrust/functional.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/iterator/transform_iterator.h>
+#include <thrust/scan.h>
 #include <thrust/sequence.h>
+#include <thrust/transform.h>
+#include <thrust/unique.h>
 
 namespace culsh {
 namespace rplsh {
 namespace detail {
 
 /**
- * @brief Extract n-th byte of signature for radix sort
+ * @brief Pack hash values into sortable keys.
+ *
+ * Keys are stored as (table_id << n_projections) | packed_signature
  */
-__global__ void extract_byte_key_kernel(const int8_t* X_sig, const uint32_t* item_indices,
-                                        int n_samples, int n_hash_tables, int n_projections,
-                                        int byte_idx, uint8_t* d_keys) {
-    size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-    size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
-    if (idx >= n_items)
-        return;
-
-    // each thread idx handles one item
-    // get nth byte of signature for item_indices[idx]
-    uint32_t original_item_idx = item_indices[idx];
-    uint32_t table_id = original_item_idx / n_samples;
-    uint32_t row_id = original_item_idx % n_samples;
-
-    // get pointer to original signature in X_sig
-    const int8_t* sig_ptr = X_sig + table_id * (static_cast<size_t>(n_samples) * n_projections) +
-                            row_id * n_projections;
-
-    d_keys[idx] = static_cast<uint8_t>(sig_ptr[byte_idx]);
-}
-
-/**
- * @brief Extract table id for final radix sort
- */
-__global__ void extract_table_id_key_kernel(const uint32_t* item_indices, int n_samples,
-                                            size_t n_items, uint8_t* d_keys) {
+__global__ void pack_keys_kernel(const float* X_hash, int n_samples, int n_hash_tables,
+                                 int n_projections, size_t n_items, uint32_t* keys) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_items)
         return;
 
-    uint32_t original_item_idx = item_indices[idx];
-    d_keys[idx] = static_cast<uint8_t>(original_item_idx / n_samples);
-}
+    // idx encodes (table_id * n_samples + sample_id)
+    int table_id = static_cast<int>(idx / n_samples);
+    int sample_id = static_cast<int>(idx % n_samples);
 
-/**
- * @brief Check if two signatures are equal
- */
- __device__ bool are_signatures_equal(const int8_t* sig1, const int8_t* sig2, int n) {
-    for (int i = 0; i < n; ++i) {
-        if (sig1[i] != sig2[i])
-            return false;
+    // pack signature bits from hash values
+    // X_hash layout: [sample][table][projection]
+    uint32_t sig = 0;
+    for (int p = 0; p < n_projections; ++p) {
+        size_t hash_idx = static_cast<size_t>(sample_id) * n_hash_tables * n_projections +
+                          static_cast<size_t>(table_id) * n_projections + p;
+        // set sign bit
+        uint32_t bit = (X_hash[hash_idx] >= 0.0f) ? 1u : 0u;
+        sig = (sig << 1) | bit;
     }
-    return true;
+
+    // combine table_id (high bits) with signature (low bits)
+    keys[idx] = (static_cast<uint32_t>(table_id) << n_projections) | sig;
 }
 
 /**
- * @brief Mark first item of each unique bucket and each new table after sort
+ * @brief Detect bucket boundaries.
  */
-__global__ void mark_boundaries_kernel(const int8_t* X_sig, const uint32_t* sorted_item_indices,
-                                       int n_samples, int n_hash_tables, int n_projections,
-                                       size_t n_items, int* d_bucket_flags, int* d_table_flags) {
+__global__ void detect_boundaries_kernel(const uint32_t* keys, size_t n_items, int* bucket_flags) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_items)
         return;
-
-    // get current item idx and table id
-    uint32_t orig_idx_curr = sorted_item_indices[idx];
-    uint32_t table_id_curr = orig_idx_curr / n_samples;
 
     if (idx == 0) {
-        // first item is a new bucket/table
-        d_bucket_flags[idx] = 1;
-        d_table_flags[idx] = 1;
-        return;
+        bucket_flags[idx] = 1;
+    } else {
+        bucket_flags[idx] = (keys[idx] != keys[idx - 1]) ? 1 : 0;
     }
-
-    // get previous item idx and table id
-    uint32_t orig_idx_prev = sorted_item_indices[idx - 1];
-    uint32_t table_id_prev = orig_idx_prev / n_samples;
-
-    // if table id changed, mark new table
-    int table_changed = (table_id_curr != table_id_prev);
-
-    int signature_changed = 0;
-    if (!table_changed) {
-        // check if signature changed from prev to curr
-        uint32_t row_id_curr = orig_idx_curr % n_samples;
-        uint32_t row_id_prev = orig_idx_prev % n_samples;
-        const int8_t* sig_ptr_curr =
-            X_sig + table_id_curr * (static_cast<size_t>(n_samples) * n_projections) +
-            row_id_curr * n_projections;
-        const int8_t* sig_ptr_prev =
-            X_sig + table_id_prev * (static_cast<size_t>(n_samples) * n_projections) +
-            row_id_prev * n_projections;
-        // if signature changed, mark new bucket
-        signature_changed = !are_signatures_equal(sig_ptr_curr, sig_ptr_prev, n_projections);
-    }
-
-    d_table_flags[idx] = table_changed;
-    d_bucket_flags[idx] = table_changed | signature_changed;
 }
 
 /**
- * @brief Scatter sorted data into final flat index
+ * @brief Extract original sample IDs from sorted item indices.
  */
-__global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* sorted_item_indices,
-                                         const int* d_bucket_flags, const int* d_bucket_scan,
-                                         int n_samples, int n_hash_tables, int n_projections,
-                                         size_t n_items, int8_t* d_bucket_signatures,
-                                         int* d_bucket_candidate_offsets, int* d_all_candidates) {
-
+__global__ void extract_sample_ids_kernel(const uint32_t* item_indices, int n_samples,
+                                          size_t n_items, int* candidate_indices) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_items)
         return;
 
-    uint32_t orig_idx = sorted_item_indices[idx];
-    uint32_t orig_row_id = orig_idx % n_samples;
-
-    // each thread (each item) stores its original row idx to all_candidate_indices in sorted order
-    d_all_candidates[idx] = orig_row_id;
-
-    if (d_bucket_flags[idx] == 1) {
-        // if this thread (item) marks start of a new bucket:
-        // 1. write idx to bucket_candidate_offsets (store starting pos of this bucket's candidates)
-        // 2. write signature for this bucket to d_bucket_signatures
-
-        int bucket_idx = d_bucket_scan[idx];
-        d_bucket_candidate_offsets[bucket_idx] = idx;
-
-        // find src signature address:
-        // (X_sig addr) + table_id * (size of table) + row_id * (size of signature)
-        uint32_t table_id = orig_idx / n_samples;
-        const int8_t* sig_src_ptr = X_sig +
-                                    table_id * (static_cast<size_t>(n_samples) * n_projections) +
-                                    orig_row_id * n_projections;
-        // find dst signature address:
-        // (d_bucket_signatures addr) + bucket_idx * (size of signature)
-        int8_t* sig_dst_ptr = d_bucket_signatures + static_cast<size_t>(bucket_idx) * n_projections;
-
-        for (int i = 0; i < n_projections; ++i) {
-            sig_dst_ptr[i] = sig_src_ptr[i];
-        }
-    }
+    candidate_indices[idx] = static_cast<int>(item_indices[idx] % n_samples);
 }
 
 /**
- * @brief Build flat LSH index structure on GPU
- * @param[in] stream CUDA stream
- * @param[in] X_sig signature matrix (n_samples x n_hash_tables * n_projections)
- * @param[in] n_samples Number of input rows
- * @param[in] n_hash_tables Number of hash tables
- * @param[in] n_projections Number of projections
- * @param[out] index Device index
+ * @brief Compute table start key for binary search.
  */
-Index build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_hash_tables,
+struct TableStartKeyFunctor {
+    int n_projections;
+
+    __host__ __device__ TableStartKeyFunctor(int n_projections) : n_projections(n_projections) {}
+
+    __device__ uint32_t operator()(int table_id) const {
+        return static_cast<uint32_t>(table_id) << n_projections;
+    }
+};
+
+/**
+ * @brief Check if flag equals 1.
+ */
+struct IsOneFunctor {
+    __host__ __device__ bool operator()(int flag) const { return flag == 1; }
+};
+
+/**
+ * @brief Build flat LSH index.
+ *
+ * @param[in] stream CUDA stream
+ * @param[in] X_hash Hash values (n_samples x n_hash_tables * n_projections)
+ * @param[in] n_samples Number of input samples
+ * @param[in] n_hash_tables Number of hash tables
+ * @param[in] n_projections Number of projections per table
+ * @return Index Device index structure
+ */
+Index build_index(cudaStream_t stream, const float* X_hash, int n_samples, int n_hash_tables,
                   int n_projections) {
+
+    // Validate that we can fit table_id + signature in uint32_t
+    // Key format: (table_id << n_projections) | signature
+    // table_id needs ceil(log2(n_hash_tables)) bits, signature needs n_projections bits
+    int table_id_bits = static_cast<int>(std::ceil(std::log2(n_hash_tables)));
+    int total_bits = table_id_bits + n_projections;
+    if (total_bits > 32) {
+        fprintf(
+            stderr,
+            "Error: n_hash_tables=%d (%d bits) + n_projections=%d exceeds 32-bit key capacity\n",
+            n_hash_tables, table_id_bits, n_projections);
+        exit(1);
+    }
+
+    auto policy = thrust::cuda::par.on(stream);
     size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
+
     dim3 block_size(256);
     dim3 grid_size((n_items + block_size.x - 1) / block_size.x);
 
-    // allocate temp storage
-    uint32_t *d_item_indices, *d_temp_indices;
-    uint8_t *d_keys, *d_temp_keys;
-    int *d_bucket_flags, *d_table_flags, *d_bucket_scan;
+    // Pack (table_id, signature) into sortable keys
+    uint32_t* d_keys;
+    uint32_t* d_keys_sorted;
+    uint32_t* d_item_indices;
+    uint32_t* d_item_indices_sorted;
+
+    CUDA_CHECK(cudaMalloc(&d_keys, n_items * sizeof(uint32_t)));
+    CUDA_CHECK(cudaMalloc(&d_keys_sorted, n_items * sizeof(uint32_t)));
     CUDA_CHECK(cudaMalloc(&d_item_indices, n_items * sizeof(uint32_t)));
-    CUDA_CHECK(cudaMalloc(&d_temp_indices, n_items * sizeof(uint32_t)));
-    CUDA_CHECK(cudaMalloc(&d_keys, n_items * sizeof(uint8_t)));
-    CUDA_CHECK(cudaMalloc(&d_temp_keys, n_items * sizeof(uint8_t)));
-    CUDA_CHECK(cudaMalloc(&d_bucket_flags, n_items * sizeof(int)));
-    CUDA_CHECK(cudaMalloc(&d_table_flags, n_items * sizeof(int)));
-    CUDA_CHECK(cudaMalloc(&d_bucket_scan, n_items * sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&d_item_indices_sorted, n_items * sizeof(uint32_t)));
 
-    // initialize sequence d_item_indices [0, 1, 2, ... n_items-1]
-    thrust::sequence(thrust::cuda::par.on(stream), d_item_indices, d_item_indices + n_items, 0);
+    thrust::sequence(policy, d_item_indices, d_item_indices + n_items, 0u);
+    pack_keys_kernel<<<grid_size, block_size, 0, stream>>>(X_hash, n_samples, n_hash_tables,
+                                                           n_projections, n_items, d_keys);
 
-    // query memory requirements for radix sort
+    // Radix sort by packed key
     void* d_temp_storage = nullptr;
     size_t temp_storage_bytes = 0;
-    cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, d_keys, d_temp_keys,
-                                    d_item_indices, d_temp_indices, n_items, 0, 8, stream);
+
+    cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, d_keys, d_keys_sorted,
+                                    d_item_indices, d_item_indices_sorted, n_items, 0,
+                                    sizeof(uint32_t) * 8, stream);
     CUDA_CHECK(cudaMalloc(&d_temp_storage, temp_storage_bytes));
 
-    // sort items lexicographically by signature, from least -> most significant signature byte
-    for (int byte_idx = n_projections - 1; byte_idx >= 0; --byte_idx) {
-        // extract nth byte for each item from corresponding signature in X_sig
-        extract_byte_key_kernel<<<grid_size, block_size, 0, stream>>>(
-            X_sig, d_item_indices, n_samples, n_hash_tables, n_projections, byte_idx, d_keys);
-        cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, d_keys, d_temp_keys,
-                                        d_item_indices, d_temp_indices, n_items, 0, 8, stream);
-        std::swap(d_item_indices, d_temp_indices);
-    }
+    cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, d_keys, d_keys_sorted,
+                                    d_item_indices, d_item_indices_sorted, n_items, 0,
+                                    sizeof(uint32_t) * 8, stream);
 
-    // final sort by table id s.t. item groups are sorted by table:
-    // d_item_indices = [table_0_item_0, table_0_item_1, ..., table_0_item_n-1,
-    //                  table_1_item_0, table_1_item_1, ..., table_1_item_n-1,
-    //                  ...]
-    extract_table_id_key_kernel<<<grid_size, block_size, 0, stream>>>(d_item_indices, n_samples,
-                                                                      n_items, d_keys);
-    cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, d_keys, d_temp_keys,
-                                    d_item_indices, d_temp_indices, n_items, 0, 8, stream);
-    std::swap(d_item_indices, d_temp_indices);
+    CUDA_CHECK(cudaFree(d_keys));
+    CUDA_CHECK(cudaFree(d_item_indices));
 
-    // mark boundaries between buckets (groups of unique items) and tables
-    mark_boundaries_kernel<<<grid_size, block_size, 0, stream>>>(
-        X_sig, d_item_indices, n_samples, n_hash_tables, n_projections, n_items, d_bucket_flags,
-        d_table_flags);
+    // Detect bucket boundaries
+    int* d_bucket_flags;
+    CUDA_CHECK(cudaMalloc(&d_bucket_flags, n_items * sizeof(int)));
 
-    // initialize index
+    detect_boundaries_kernel<<<grid_size, block_size, 0, stream>>>(d_keys_sorted, n_items,
+                                                                   d_bucket_flags);
+
+    // Compute bucket IDs
+    int* d_bucket_ids;
+    CUDA_CHECK(cudaMalloc(&d_bucket_ids, n_items * sizeof(int)));
+
+    thrust::exclusive_scan(policy, d_bucket_flags, d_bucket_flags + n_items, d_bucket_ids, 0);
+
+    // Get total number of buckets
+    int last_bucket_id, last_flag;
+    CUDA_CHECK(cudaMemcpyAsync(&last_bucket_id, d_bucket_ids + (n_items - 1), sizeof(int),
+                               cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaMemcpyAsync(&last_flag, d_bucket_flags + (n_items - 1), sizeof(int),
+                               cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    int n_total_buckets = last_bucket_id + last_flag;
+
+    // Extract unique bucket keys
     Index index;
     index.n_hash_tables = n_hash_tables;
     index.n_projections = n_projections;
+    index.n_total_buckets = n_total_buckets;
     index.n_total_candidates = static_cast<int>(n_items);
+
+    CUDA_CHECK(cudaMalloc(&index.bucket_keys, n_total_buckets * sizeof(uint32_t)));
+
+    thrust::unique_copy(policy, d_keys_sorted, d_keys_sorted + n_items, index.bucket_keys);
+
+    // Extract bucket candidate offsets
+    CUDA_CHECK(cudaMalloc(&index.bucket_candidate_offsets, (n_total_buckets + 1) * sizeof(int)));
+
+    // Copy positions where bucket_flags == 1
+    auto flag_iter = thrust::make_transform_iterator(d_bucket_flags, IsOneFunctor());
+
+    thrust::copy_if(policy, thrust::make_counting_iterator<int>(0),
+                    thrust::make_counting_iterator<int>(static_cast<int>(n_items)), flag_iter,
+                    index.bucket_candidate_offsets, thrust::identity<bool>());
+
+    // Set sentinel value
+    int n_items_int = static_cast<int>(n_items);
+    CUDA_CHECK(cudaMemcpyAsync(index.bucket_candidate_offsets + n_total_buckets, &n_items_int,
+                               sizeof(int), cudaMemcpyHostToDevice, stream));
+
+    // Extract candidate indices (original sample IDs)
+    CUDA_CHECK(cudaMalloc(&index.all_candidate_indices, n_items * sizeof(int)));
+
+    extract_sample_ids_kernel<<<grid_size, block_size, 0, stream>>>(
+        d_item_indices_sorted, n_samples, n_items, index.all_candidate_indices);
+
+    // Compute table bucket offsets via binary search
     CUDA_CHECK(cudaMalloc(&index.table_bucket_offsets, (n_hash_tables + 1) * sizeof(int)));
 
-    // run exclusive sum to get bucket offsets from binary flags, e.g.
-    // d_bucket_flags = [1, 0, 0, 1, 0, 0, 1, 0, ...]
-    // d_bucket_scan = [0, 1, 1, 2, 2, 2, 3, 3, ...]
-    cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes, d_bucket_flags, d_bucket_scan,
-                                  n_items, stream);
+    // For each table t, find first bucket with key >= (t << n_projections)
+    TableStartKeyFunctor table_key_fn(n_projections);
+    auto table_keys_iter =
+        thrust::make_transform_iterator(thrust::make_counting_iterator<int>(0), table_key_fn);
 
-    int* d_num_selected_out;
-    CUDA_CHECK(cudaMalloc(&d_num_selected_out, sizeof(int)));
+    thrust::lower_bound(policy, index.bucket_keys, index.bucket_keys + n_total_buckets,
+                        table_keys_iter, table_keys_iter + n_hash_tables,
+                        index.table_bucket_offsets);
 
-    // query memory requirements for select
-    void* d_select_temp_storage = nullptr;
-    size_t select_temp_storage_bytes = 0;
-    cub::DeviceSelect::Flagged(d_select_temp_storage, select_temp_storage_bytes, d_bucket_scan,
-                               d_table_flags, index.table_bucket_offsets, d_num_selected_out,
-                               n_items, stream);
-    CUDA_CHECK(cudaMalloc(&d_select_temp_storage, select_temp_storage_bytes));
+    // Set sentinel
+    CUDA_CHECK(cudaMemcpyAsync(index.table_bucket_offsets + n_hash_tables, &n_total_buckets,
+                               sizeof(int), cudaMemcpyHostToDevice, stream));
 
-    // select from d_bucket_scan using d_table_flags to get table offsets. e.g.
-    // d_bucket_scan = [0, 1, 1, 2, 2, 2, 3, 3, ...]
-    // d_table_flags = [1, 0, 0, 1, 0, 0, 1, 0, ...]
-    // table_bucket_offsets = [0, 2, 3, ...]
-    cub::DeviceSelect::Flagged(d_select_temp_storage, select_temp_storage_bytes, d_bucket_scan,
-                               d_table_flags, index.table_bucket_offsets, d_num_selected_out,
-                               n_items, stream);
-
-    // get total number of unique buckets:
-    // last_bucket_idx_val (buckets seen before last item) + last_bucket_flag_val (whether last
-    // bucket is new bucket)
-    int last_bucket_idx_val, last_bucket_flag_val;
-    CUDA_CHECK(cudaMemcpyAsync(&last_bucket_idx_val, d_bucket_scan + (n_items - 1), sizeof(int),
-                               cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaMemcpyAsync(&last_bucket_flag_val, d_bucket_flags + (n_items - 1), sizeof(int),
-                               cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-    index.n_total_buckets = last_bucket_idx_val + last_bucket_flag_val;
-
-    // allocate all_candidate_indices - original row idx for all items in sorted order
-    CUDA_CHECK(cudaMalloc(&index.all_candidate_indices, n_items * sizeof(int)));
-    // allocate bucket_candidate_offsets - start idx of each bucket's candidate indices in
-    // all_candidate_indices
-    CUDA_CHECK(
-        cudaMalloc(&index.bucket_candidate_offsets, (index.n_total_buckets + 1) * sizeof(int)));
-    // allocate all_bucket_signatures - signature for all buckets in sorted order
-    CUDA_CHECK(cudaMalloc(&index.all_bucket_signatures, static_cast<size_t>(index.n_total_buckets) *
-                                                            n_projections * sizeof(int8_t)));
-
-    // set terminating values in offset arrays
-    int n_items_int = static_cast<int>(n_items);
-    CUDA_CHECK(cudaMemcpyAsync(index.table_bucket_offsets + n_hash_tables, &index.n_total_buckets,
-                               sizeof(int), cudaMemcpyHostToDevice,
-                               stream)); // for table_bucket_offsets, set total number of buckets
-    CUDA_CHECK(cudaMemcpyAsync(index.bucket_candidate_offsets + index.n_total_buckets, &n_items_int,
-                               sizeof(int), cudaMemcpyHostToDevice,
-                               stream)); // for bucket_candidate_offsets, set total number of items
-
-    // scatter sorted data into final flat index
-    build_final_index_kernel<<<grid_size, block_size, 0, stream>>>(
-        X_sig, d_item_indices, d_bucket_flags, d_bucket_scan, n_samples, n_hash_tables,
-        n_projections, n_items, index.all_bucket_signatures, index.bucket_candidate_offsets,
-        index.all_candidate_indices);
-
-    // cleanup temp stuff
+    // Cleanup
     CUDA_CHECK(cudaFree(d_temp_storage));
-    CUDA_CHECK(cudaFree(d_item_indices));
-    CUDA_CHECK(cudaFree(d_temp_indices));
-    CUDA_CHECK(cudaFree(d_keys));
-    CUDA_CHECK(cudaFree(d_temp_keys));
+    CUDA_CHECK(cudaFree(d_keys_sorted));
+    CUDA_CHECK(cudaFree(d_item_indices_sorted));
     CUDA_CHECK(cudaFree(d_bucket_flags));
-    CUDA_CHECK(cudaFree(d_table_flags));
-    CUDA_CHECK(cudaFree(d_bucket_scan));
-    CUDA_CHECK(cudaFree(d_num_selected_out));
-    CUDA_CHECK(cudaFree(d_select_temp_storage));
+    CUDA_CHECK(cudaFree(d_bucket_ids));
+
+    CUDA_CHECK(cudaStreamSynchronize(stream));
 
     return index;
 }

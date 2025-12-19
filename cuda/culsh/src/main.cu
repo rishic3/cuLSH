@@ -43,28 +43,20 @@ culsh::rplsh::Index main_fit(cublasHandle_t cublas_handle, cudaStream_t stream, 
     culsh::rplsh::detail::hash<float>(cublas_handle, stream, X, P, n_samples, n_features,
                                       params.n_hash_tables, params.n_projections, X_hash);
 
-    // compute binary signatures from X_hash
-    int8_t* X_sig;
-    CUDA_CHECK(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
-                                      params.n_projections * sizeof(int8_t)));
-    culsh::rplsh::detail::compute_signatures<float>(stream, X_hash, n_samples, params.n_hash_tables,
-                                                    params.n_projections, X_sig);
-    CUDA_CHECK(cudaFree(X_hash)); // done with X_hash
-
-    // build and return index
-    auto index = culsh::rplsh::detail::build_index(stream, X_sig, n_samples, params.n_hash_tables,
+    // build index directly from hash values (no separate signature step needed)
+    auto index = culsh::rplsh::detail::build_index(stream, X_hash, n_samples, params.n_hash_tables,
                                                    params.n_projections);
-    CUDA_CHECK(cudaFree(X_sig));
+    CUDA_CHECK(cudaFree(X_hash));
 
     return index;
 }
 
 void test() {
-    const int n = 10000000;
-    const int d = 512;
+    const int n = 1000000;
+    const int d = 128;
     const int n_hash_tables = 64;
     const int n_projections = 8;
-    const int n_total_buckets = n_hash_tables * n_projections;
+    const int n_total_projections = n_hash_tables * n_projections;
 
     // create stream
     cudaStream_t stream;
@@ -77,9 +69,9 @@ void test() {
     float* X;
     float* P;
 
-    // allocate memory for X, P, X_hash
+    // allocate memory for X, P
     CUDA_CHECK(cudaMalloc(&X, static_cast<size_t>(n) * d * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&P, static_cast<size_t>(n_total_buckets) * d * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&P, static_cast<size_t>(n_total_projections) * d * sizeof(float)));
 
     generate_x(X, n, d, 12345);
 
@@ -98,36 +90,32 @@ void test() {
     CUDA_CHECK(cudaFree(X));
 
     // QUERY
+    const int n_queries = 1000;
     float* Q;
-    CUDA_CHECK(cudaMalloc(&Q, static_cast<size_t>(n) * d * sizeof(float)));
-    generate_x(Q, n, d, 42);
+    CUDA_CHECK(cudaMalloc(&Q, static_cast<size_t>(n_queries) * d * sizeof(float)));
+    generate_x(Q, n_queries, d, 42);
 
     float* Q_hash;
-    CUDA_CHECK(cudaMalloc(&Q_hash, static_cast<size_t>(n) * n_total_buckets * sizeof(float)));
+    CUDA_CHECK(
+        cudaMalloc(&Q_hash, static_cast<size_t>(n_queries) * n_total_projections * sizeof(float)));
 
     auto start_query = std::chrono::high_resolution_clock::now();
 
-    culsh::rplsh::detail::hash<float>(cublas_handle, stream, Q, P, n, d, n_hash_tables,
+    culsh::rplsh::detail::hash<float>(cublas_handle, stream, Q, P, n_queries, d, n_hash_tables,
                                       n_projections, Q_hash);
 
     CUDA_CHECK(cudaFree(P));
+    CUDA_CHECK(cudaFree(Q));
 
-    int8_t* Q_sig;
-    CUDA_CHECK(cudaMalloc(&Q_sig, static_cast<size_t>(n) * n_total_buckets * sizeof(int8_t)));
-
-    // convert hash values to signatures
-    culsh::rplsh::detail::compute_signatures<float>(stream, Q_hash, n, n_hash_tables, n_projections,
-                                                    Q_sig);
-
-    CUDA_CHECK(cudaFree(Q_hash));
-
-    culsh::rplsh::Candidates candidates =
-        culsh::rplsh::detail::query_index(stream, Q_sig, n, n_hash_tables, n_projections, &index);
+    // query index directly with hash values
+    culsh::rplsh::Candidates candidates = culsh::rplsh::detail::query_index(
+        stream, Q_hash, n_queries, n_hash_tables, n_projections, &index);
 
     auto end_query = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> query_time = end_query - start_query;
     std::cout << "  Query took [" << query_time.count() << "s]" << std::endl;
 
+    CUDA_CHECK(cudaFree(Q_hash));
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
     CUDA_CHECK(cudaStreamDestroy(stream));
 }
@@ -137,7 +125,7 @@ void test_breakdown() {
     const int d = 128;
     const int n_hash_tables = 64;
     const int n_projections = 8;
-    const int n_total_buckets = n_hash_tables * n_projections;
+    const int n_total_projections = n_hash_tables * n_projections;
 
     float* X;
     float* P;
@@ -153,15 +141,16 @@ void test_breakdown() {
 
     // allocate memory for X, P, X_hash
     CUDA_CHECK(cudaMalloc(&X, static_cast<size_t>(n) * d * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&P, static_cast<size_t>(n_total_buckets) * d * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&X_hash, static_cast<size_t>(n) * n_total_buckets * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&P, static_cast<size_t>(n_total_projections) * d * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&X_hash, static_cast<size_t>(n) * n_total_projections * sizeof(float)));
 
     // generate X
     generate_x(X, n, d, 12345);
 
     auto start_generate_projections = std::chrono::high_resolution_clock::now();
     // generate random projections
-    culsh::rplsh::detail::generate_random_projections<float>(stream, n_total_buckets, d, 12345, P);
+    culsh::rplsh::detail::generate_random_projections<float>(stream, n_total_projections, d, 12345,
+                                                             P);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end_generate_projections = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> generate_projections_time =
@@ -182,33 +171,18 @@ void test_breakdown() {
     CUDA_CHECK(cudaFree(P));
     CUDA_CHECK(cudaFree(X));
 
-    // allocate memory for signatures
-    int8_t* X_signatures;
-    CUDA_CHECK(
-        cudaMalloc(&X_signatures, static_cast<size_t>(n) * n_total_buckets * sizeof(int8_t)));
-
-    auto start_compute_signatures = std::chrono::high_resolution_clock::now();
-    // convert hash values to signatures
-    culsh::rplsh::detail::compute_signatures<float>(stream, X_hash, n, n_hash_tables, n_projections,
-                                                    X_signatures);
-    // CUDA_CHECK(cudaStreamSynchronize(stream));
-    auto end_compute_signatures = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> compute_signatures_time =
-        end_compute_signatures - start_compute_signatures;
-    std::cout << "Computed signatures in " << compute_signatures_time.count() << " sec"
-              << std::endl;
-
     auto start_build_index = std::chrono::high_resolution_clock::now();
-    // build index
+    // build index directly from hash values
     culsh::rplsh::Index index =
-        culsh::rplsh::detail::build_index(stream, X_signatures, n, n_hash_tables, n_projections);
-    // CUDA_CHECK(cudaStreamSynchronize(stream));
+        culsh::rplsh::detail::build_index(stream, X_hash, n, n_hash_tables, n_projections);
+    CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end_build_index = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> build_index_time = end_build_index - start_build_index;
     std::cout << "Built index in " << build_index_time.count() << " sec" << std::endl;
 
     std::chrono::duration<double> total_time = end_build_index - start_generate_projections;
     std::cout << "   Total fit time in " << total_time.count() << " sec" << std::endl;
+
     // print index metadata
     std::cout << "Index metadata: " << std::endl;
     std::cout << "  n_total_buckets: " << index.n_total_buckets << std::endl;
@@ -217,8 +191,7 @@ void test_breakdown() {
 
     CUDA_CHECK(cudaGetLastError());
 
-    // free signatures
-    CUDA_CHECK(cudaFree(X_signatures));
+    // free hash values
     CUDA_CHECK(cudaFree(X_hash));
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
     CUDA_CHECK(cudaStreamDestroy(stream));
@@ -231,8 +204,6 @@ int main() {
     std::cout << "Compute Capability: " << prop.major << "." << prop.minor << std::endl;
     std::cout << "Global Memory: " << prop.totalGlobalMem / (1024 * 1024) << " MB\n" << std::endl;
 
-    // test_generate_random_projections(false);
-    // test_hash();
     test();
     return 0;
 }
