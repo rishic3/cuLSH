@@ -34,7 +34,10 @@ add_executable(main culsh/src/main.cu)
 target_link_libraries(main culsh_lib)
 
 # benchmark
-add_executable(benchmark benchmark/bench.cu)
+add_executable(benchmark 
+    benchmark/bench.cu
+    benchmark/bench_utils.cpp
+)
 target_include_directories(benchmark PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/culsh/src
 )

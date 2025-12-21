@@ -128,6 +128,11 @@ void test() {
     std::chrono::duration<double> query_time = end_query - start_query;
     std::cout << "  Query took [" << query_time.count() << "s]" << std::endl;
 
+    // cleanup
+    CUDA_CHECK(cudaFree(Q));
+    CUDA_CHECK(cudaFree(Q_sig));
+    candidates.free();
+    index.free();
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
     CUDA_CHECK(cudaStreamDestroy(stream));
 }
@@ -217,9 +222,10 @@ void test_breakdown() {
 
     CUDA_CHECK(cudaGetLastError());
 
-    // free signatures
+    // free signatures and index
     CUDA_CHECK(cudaFree(X_signatures));
     CUDA_CHECK(cudaFree(X_hash));
+    index.free();
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
     CUDA_CHECK(cudaStreamDestroy(stream));
 }

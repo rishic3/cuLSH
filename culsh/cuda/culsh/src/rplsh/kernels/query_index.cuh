@@ -216,6 +216,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
 
     // initialize output candidates
     Candidates candidates;
+    candidates.n_queries = n_queries;
     CUDA_CHECK(cudaMalloc(&candidates.query_candidate_counts, n_queries * sizeof(size_t)));
     CUDA_CHECK(cudaMalloc(&candidates.query_candidate_offsets, (n_queries + 1) * sizeof(size_t)));
 
@@ -253,6 +254,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     size_t total_candidates = total_candidates_offset + last_query_count;
+    candidates.n_total_candidates = total_candidates;
 
     printf("Total candidates: %zu (%.2f GB)\n", total_candidates,
            (double)total_candidates * sizeof(int) / (1024.0 * 1024.0 * 1024.0));

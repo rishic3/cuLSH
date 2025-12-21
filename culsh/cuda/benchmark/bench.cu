@@ -1,3 +1,5 @@
+#include "bench_utils.hpp"
+
 #include "../culsh/src/rplsh/candidates.cuh"
 #include "../culsh/src/rplsh/index.cuh"
 #include "../culsh/src/rplsh/kernels/build_index.cuh"
@@ -16,107 +18,12 @@
 #include <iomanip>
 #include <iostream>
 #include <random>
-#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
+
 using namespace std;
 namespace fs = filesystem;
-
-/*
- * Read SIFT .fvecs file
- */
-float* read_fvecs(const string& filepath, int& n_vectors, int& dimensions) {
-    ifstream file(filepath, ios::binary);
-    if (!file.is_open()) {
-        throw runtime_error("Failed to open file '" + filepath + "'");
-    }
-
-    // read input dimension
-    int d;
-    file.read(reinterpret_cast<char*>(&d), sizeof(int));
-
-    file.seekg(0, ios::end);
-    streamsize file_size = file.tellg();
-    file.seekg(0, ios::beg);
-
-    int vector_size = sizeof(int) + d * sizeof(float);
-    int n_vecs = file_size / vector_size;
-
-    // allocate memory for data array (row-major: n_vectors x dimensions)
-    float* data = new float[n_vecs * d];
-
-    // read all vectors into float array
-    for (int i = 0; i < n_vecs; ++i) {
-        int dim;
-        file.read(reinterpret_cast<char*>(&dim), sizeof(int));
-        if (dim != d) {
-            throw runtime_error("Inconsistent dimensions in file");
-        }
-
-        file.read(reinterpret_cast<char*>(&data[i * d]), d * sizeof(float));
-    }
-
-    n_vectors = n_vecs;
-    dimensions = d;
-    return data;
-}
-
-vector<int> get_gt_top_k_indices(const float* q, const float* X, int n_vectors, int dimensions,
-                                 int k) {
-    // normalize query vector
-    float q_norm = 0.0f;
-    for (int i = 0; i < dimensions; ++i) {
-        q_norm += q[i] * q[i];
-    }
-    q_norm = sqrt(q_norm);
-
-    vector<float> q_normalized(dimensions);
-    for (int i = 0; i < dimensions; ++i) {
-        q_normalized[i] = q[i] / q_norm;
-    }
-
-    vector<pair<float, int>> sim_idx;
-    sim_idx.reserve(n_vectors);
-
-    // compute cosine similarities
-    for (int i = 0; i < n_vectors; ++i) {
-        // normalize X[i] and compute dot product with normalized query
-        float x_norm = 0.0f;
-        for (int j = 0; j < dimensions; ++j) {
-            float val = X[i * dimensions + j];
-            x_norm += val * val;
-        }
-        x_norm = sqrt(x_norm);
-
-        float cos_sim = 0.0f;
-        for (int j = 0; j < dimensions; ++j) {
-            cos_sim += (X[i * dimensions + j] / x_norm) * q_normalized[j];
-        }
-
-        sim_idx.push_back({cos_sim, i});
-    }
-
-    sort(sim_idx.begin(), sim_idx.end(), greater<pair<float, int>>());
-
-    vector<int> top_k;
-    for (int i = 0; i < min(k, static_cast<int>(sim_idx.size())); ++i) {
-        top_k.push_back(sim_idx[i].second);
-    }
-
-    return top_k;
-}
-
-double calculate_recall(const vector<int>& lsh_indices, const vector<int>& gt_indices) {
-    set<int> lsh_set(lsh_indices.begin(), lsh_indices.end());
-    set<int> gt_set(gt_indices.begin(), gt_indices.end());
-
-    set<int> intersection;
-    set_intersection(lsh_set.begin(), lsh_set.end(), gt_set.begin(), gt_set.end(),
-                     inserter(intersection, intersection.begin()));
-
-    return static_cast<double>(intersection.size()) / gt_set.size();
-}
 
 culsh::rplsh::Index cuda_fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X_host,
                              int n_samples, int n_features, int n_hash_tables, int n_projections,
@@ -283,8 +190,8 @@ int main(int argc, char* argv[]) {
 
     // read data
     int n_samples, n_features, n_queries_data, n_features_q;
-    float* X = read_fvecs(conf.data_dir / "sift_base.fvecs", n_samples, n_features);
-    float* Q_all = read_fvecs(conf.data_dir / "sift_query.fvecs", n_queries_data, n_features_q);
+    float* X = bench::read_fvecs(conf.data_dir / "sift_base.fvecs", n_samples, n_features);
+    float* Q_all = bench::read_fvecs(conf.data_dir / "sift_query.fvecs", n_queries_data, n_features_q);
 
     if (n_features != n_features_q) {
         throw runtime_error("Dimension mismatch between fit and query data");
@@ -331,54 +238,33 @@ int main(int argc, char* argv[]) {
     auto query_seconds = chrono::duration_cast<chrono::duration<double>>(query_time).count();
     cout << "-> CUDA query() completed in " << query_seconds << "s" << endl << endl;
 
-    // calculate recall for first query
-    double recall_score = 0.0;
-    int intersection_size = 0;
-    int gt_size = 0;
+    // copy candidate results to host for recall evaluation
+    const int n_eval_queries = min(20, n_test_queries);
+    
+    vector<size_t> h_candidate_counts(n_test_queries);
+    vector<size_t> h_candidate_offsets(n_test_queries + 1);
+    CUDA_CHECK(cudaMemcpy(h_candidate_counts.data(), candidates.query_candidate_counts,
+                          n_test_queries * sizeof(size_t), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_candidate_offsets.data(), candidates.query_candidate_offsets,
+                          (n_test_queries + 1) * sizeof(size_t), cudaMemcpyDeviceToHost));
 
-    // extract candidates for first query from GPU results
-    vector<int> lsh_indices;
-
-    // copy candidate counts for first query to host
-    size_t first_query_candidate_count;
-    CUDA_CHECK(cudaMemcpy(&first_query_candidate_count, &candidates.query_candidate_counts[0],
-                          sizeof(size_t), cudaMemcpyDeviceToHost));
-
-    if (first_query_candidate_count > 0) {
-        // get offset for first query candidates
-        size_t first_query_offset;
-        CUDA_CHECK(cudaMemcpy(&first_query_offset, &candidates.query_candidate_offsets[0],
-                              sizeof(size_t), cudaMemcpyDeviceToHost));
-
-        // copy candidate indices for first query to host
-        lsh_indices.resize(first_query_candidate_count);
-        CUDA_CHECK(cudaMemcpy(lsh_indices.data(),
-                              &candidates.query_candidate_indices[first_query_offset],
-                              first_query_candidate_count * sizeof(int), cudaMemcpyDeviceToHost));
-
-        if (!lsh_indices.empty()) {
-            gt_size = lsh_indices.size();
-            vector<int> gt_indices =
-                get_gt_top_k_indices(&Q_all[0], X, n_samples, n_features, gt_size);
-            recall_score = calculate_recall(lsh_indices, gt_indices);
-
-            set<int> lsh_set(lsh_indices.begin(), lsh_indices.end());
-            set<int> gt_set(gt_indices.begin(), gt_indices.end());
-            set<int> intersection;
-            set_intersection(lsh_set.begin(), lsh_set.end(), gt_set.begin(), gt_set.end(),
-                             inserter(intersection, intersection.begin()));
-            intersection_size = intersection.size();
-
-            cout << "First query recall: " << recall_score << " (" << intersection_size << "/"
-                 << gt_size << ")" << endl;
-        }
-    } else {
-        cout << "No candidates found for first query" << endl;
+    size_t total_candidates = h_candidate_offsets[n_test_queries];
+    vector<int> h_all_candidates(total_candidates);
+    if (total_candidates > 0) {
+        CUDA_CHECK(cudaMemcpy(h_all_candidates.data(), candidates.query_candidate_indices,
+                              total_candidates * sizeof(int), cudaMemcpyDeviceToHost));
     }
 
+    // evaluate recall
+    bench::RecallResults recall_results = bench::evaluate_recall(
+        Q_all, X, n_samples, n_features, n_eval_queries,
+        h_candidate_counts, h_candidate_offsets, h_all_candidates, /*verbose=*/true);
+
     // save report
-    if (!fs::create_directories(conf.save_dir) && !fs::exists(conf.save_dir)) {
-        throw runtime_error("Failed to create save directory: " + conf.save_dir.string());
+    fs::path abs_save_dir = fs::absolute(conf.save_dir);
+    fs::create_directories(abs_save_dir);
+    if (!fs::exists(abs_save_dir)) {
+        throw runtime_error("Failed to create save directory: " + abs_save_dir.string());
     }
     auto now = chrono::system_clock::now();
     auto time_t = chrono::system_clock::to_time_t(now);
@@ -386,9 +272,12 @@ int main(int argc, char* argv[]) {
     ss << put_time(localtime(&time_t), "%Y%m%d_%H%M%S");
     string report_filename = "report_h" + to_string(conf.n_hash_tables) + "_p" +
                              to_string(conf.n_projections) + "_" + ss.str() + ".json";
-    fs::path report_path = conf.save_dir / report_filename;
+    fs::path report_path = abs_save_dir / report_filename;
 
     ofstream report(report_path);
+    if (!report.is_open()) {
+        throw runtime_error("Failed to open report file: " + report_path.string());
+    }
     report << "{\n";
     report << "    \"params\": {\n";
     report << "        \"n_hash_tables\": " << conf.n_hash_tables << ",\n";
@@ -400,10 +289,16 @@ int main(int argc, char* argv[]) {
     report << "        \"fit_time\": " << fit_seconds << ",\n";
     report << "        \"query_time\": " << query_seconds << "\n";
     report << "    },\n";
-    report << "    \"first_query_results\": {\n";
-    report << "        \"recall_score\": " << recall_score << ",\n";
-    report << "        \"intersection_size\": " << intersection_size << ",\n";
-    report << "        \"gt_size\": " << gt_size << "\n";
+    report << "    \"recall_evaluation\": {\n";
+    report << "        \"n_eval_queries\": " << recall_results.n_eval_queries << ",\n";
+    report << "        \"queries_with_candidates\": " << recall_results.queries_with_candidates << ",\n";
+    report << "        \"avg_recall\": " << recall_results.avg_recall << ",\n";
+    report << "        \"per_query_recall\": [";
+    for (size_t i = 0; i < recall_results.per_query_recall.size(); ++i) {
+        report << recall_results.per_query_recall[i];
+        if (i < recall_results.per_query_recall.size() - 1) report << ", ";
+    }
+    report << "]\n";
     report << "    }\n";
     report << "}\n";
     report.close();
@@ -411,6 +306,8 @@ int main(int argc, char* argv[]) {
     cout << "Report saved to " << report_path.string() << endl;
 
     // cleanup CUDA resources
+    candidates.free();
+    index.free();
     CUDA_CHECK(cudaFree(P));
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
     CUDA_CHECK(cudaStreamDestroy(stream));
