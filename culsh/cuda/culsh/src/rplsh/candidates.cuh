@@ -35,6 +35,61 @@ struct Candidates {
     size_t n_total_candidates = 0;
 
     /**
+     * @brief Default constructor
+     */
+    Candidates()
+        : query_candidate_indices(nullptr), query_candidate_counts(nullptr),
+          query_candidate_offsets(nullptr) {}
+
+    /**
+     * @brief Destructor
+     */
+    ~Candidates() { free(); }
+
+    /**
+     * @brief Move constructor
+     */
+    Candidates(Candidates&& other) noexcept
+        : query_candidate_indices(other.query_candidate_indices),
+          query_candidate_counts(other.query_candidate_counts),
+          query_candidate_offsets(other.query_candidate_offsets) {
+
+        // nullify moved-from object to prevent double-free
+        other.query_candidate_indices = nullptr;
+        other.query_candidate_counts = nullptr;
+        other.query_candidate_offsets = nullptr;
+    }
+
+    /**
+     * @brief Move assignment operator
+     */
+    Candidates& operator=(Candidates&& other) noexcept {
+        if (this != &other) {
+            free();
+
+            query_candidate_indices = other.query_candidate_indices;
+            query_candidate_counts = other.query_candidate_counts;
+            query_candidate_offsets = other.query_candidate_offsets;
+
+            // nullify moved-from object to prevent double-free
+            other.query_candidate_indices = nullptr;
+            other.query_candidate_counts = nullptr;
+            other.query_candidate_offsets = nullptr;
+        }
+        return *this;
+    }
+
+    /**
+     * @brief Delete copy constructor
+     */
+    Candidates(const Candidates&) = delete;
+
+    /**
+     * @brief Delete copy assignment operator
+     */
+    Candidates& operator=(const Candidates&) = delete;
+
+    /**
      * @brief Check empty
      */
     bool empty() const {

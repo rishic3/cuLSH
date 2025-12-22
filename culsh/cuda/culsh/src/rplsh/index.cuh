@@ -45,6 +45,76 @@ struct Index {
     int n_projections = 0;
 
     /**
+     * @brief Default constructor
+     */
+    Index()
+        : all_candidate_indices(nullptr), all_bucket_signatures(nullptr),
+          bucket_candidate_offsets(nullptr), table_bucket_offsets(nullptr), n_total_buckets(0),
+          n_hash_tables(0), n_projections(0) {}
+
+    /**
+     * @brief Destructor
+     */
+    ~Index() { free(); }
+
+    /**
+     * @brief Move constructor
+     */
+    Index(Index&& other) noexcept
+        : all_candidate_indices(other.all_candidate_indices),
+          all_bucket_signatures(other.all_bucket_signatures),
+          bucket_candidate_offsets(other.bucket_candidate_offsets),
+          table_bucket_offsets(other.table_bucket_offsets), n_total_buckets(other.n_total_buckets),
+          n_hash_tables(other.n_hash_tables), n_projections(other.n_projections) {
+
+        // nullify moved-from object to prevent double-free
+        other.all_candidate_indices = nullptr;
+        other.all_bucket_signatures = nullptr;
+        other.bucket_candidate_offsets = nullptr;
+        other.table_bucket_offsets = nullptr;
+        other.n_total_buckets = 0;
+        other.n_hash_tables = 0;
+        other.n_projections = 0;
+    }
+
+    /**
+     * @brief Move assignment operator
+     */
+    Index& operator=(Index&& other) noexcept {
+        if (this != &other) {
+            free();
+
+            all_candidate_indices = other.all_candidate_indices;
+            all_bucket_signatures = other.all_bucket_signatures;
+            bucket_candidate_offsets = other.bucket_candidate_offsets;
+            table_bucket_offsets = other.table_bucket_offsets;
+            n_total_buckets = other.n_total_buckets;
+            n_hash_tables = other.n_hash_tables;
+            n_projections = other.n_projections;
+
+            // nullify moved-from object to prevent double-free
+            other.all_candidate_indices = nullptr;
+            other.all_bucket_signatures = nullptr;
+            other.bucket_candidate_offsets = nullptr;
+            other.table_bucket_offsets = nullptr;
+            other.n_total_buckets = 0;
+            other.n_hash_tables = 0;
+            other.n_projections = 0;
+        }
+        return *this;
+    }
+
+    /**
+     * @brief Delete copy constructor
+     */
+    Index(const Index&) = delete;
+
+    /**
+     * @brief Delete copy assignment operator
+     */
+    Index& operator=(const Index&) = delete;
+
+    /**
      * @brief Check empty
      */
     bool empty() const {
