@@ -11,46 +11,81 @@ from lsh import RandomProjectionLSH
 
 
 def read_fvecs(fp):
+    """Read fvecs file into numpy array"""
     a = np.fromfile(fp, dtype="int32")
     d = a[0]
     return a.reshape(-1, d + 1)[:, 1:].copy().view("float32")
 
 
 def get_gt_top_k_indices(q, X, k):
+    """Get top k indices of ground truth vectors by cosine similarity"""
     q_norm = q / np.linalg.norm(q)
     X_norm = X / np.linalg.norm(X, axis=1, keepdims=True)
     cos_sims = np.dot(X_norm, q_norm)
-
-    # reverse - higher similarity is better
     return np.argsort(cos_sims)[-k:][::-1]
 
 
-def recall(lsh_indices, gt_top_k_indices):
+def compute_recall(lsh_indices, gt_top_k_indices):
+    """Calculate recall score"""
+    if len(gt_top_k_indices) == 0:
+        return 0.0
     lsh_set = set(lsh_indices)
     gt_set = set(gt_top_k_indices)
-
     intersection = lsh_set.intersection(gt_set)
-    recall_score = len(intersection) / len(gt_set)
+    return len(intersection) / len(gt_set)
 
-    return recall_score, len(intersection), len(gt_set)
+
+def evaluate_recall(Q, X, all_neighbors, n_eval_queries, verbose=True):
+    """Evaluate recall for the first n_eval_queries queries"""
+    per_query_recall = []
+    queries_with_candidates = 0
+
+    for i in range(n_eval_queries):
+        lsh_indices = all_neighbors[i]
+        k = len(lsh_indices)
+
+        if k == 0:
+            per_query_recall.append(0.0)
+            if verbose:
+                print(f"  Query {i}: no candidates")
+            continue
+
+        queries_with_candidates += 1
+        gt_indices = get_gt_top_k_indices(Q[i], X, k)
+        recall_score = compute_recall(lsh_indices, gt_indices)
+        per_query_recall.append(recall_score)
+
+        if verbose:
+            print(f"  Query {i}: recall={recall_score:.4f} (k={k})")
+
+    avg_recall = np.mean(per_query_recall) if per_query_recall else 0.0
+
+    return {
+        "n_eval_queries": n_eval_queries,
+        "queries_with_candidates": queries_with_candidates,
+        "avg_recall": float(avg_recall),
+        "per_query_recall": [float(r) for r in per_query_recall],
+    }
 
 
 def run_benchmark():
     parser = argparse.ArgumentParser(
-        description="Test RandomProjection LSH on SIFT dataset"
+        description="Benchmark pure-Python LSH on SIFT dataset"
     )
-    parser.add_argument("-d", "--data-dir", type=str)
+    parser.add_argument("-d", "--data-dir", type=str, required=True)
     parser.add_argument("-nh", "--n-hash-tables", type=int, default=16)
     parser.add_argument("-np", "--n-projections", type=int, default=4)
-    parser.add_argument("-s", "--seed", type=int, default=None)
+    parser.add_argument("-s", "--seed", type=int, default=42)
     parser.add_argument("-nq", "--n-queries", type=int, default=100)
+    parser.add_argument("-ne", "--n-eval-queries", type=int, default=10)
+    parser.add_argument("-r", "--results-dir", type=str, default=None)
     parser.add_argument("-o", "--save-dir", type=str, default=None)
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
     if not data_dir.exists():
         raise FileNotFoundError(
-            f"Data dir '{data_dir}' not found. download_sift1m first"
+            f"Data dir '{data_dir}' not found. Run download_sift1m first"
         )
 
     X = read_fvecs(data_dir / "sift_base.fvecs")
@@ -69,70 +104,69 @@ def run_benchmark():
     )
 
     print()
-    print("Created LSH Model:")
+    print("LSH Model:")
     print(f"  n_hash_tables: {lsh.n_hash_tables}")
     print(f"  n_projections: {lsh.n_projections}")
     print(f"  seed: {lsh.seed}")
     print()
 
     try:
+        # Fit
         print("Running fit()...")
         start_time = time.time()
         model = lsh.fit(X)
         fit_time = time.time() - start_time
-        print(f"fit() completed in {fit_time:.2f}s\n")
+        print(f"fit() completed in {fit_time:.2f}s")
         print()
 
-        # Query model
+        # Query
         print("Running query()...")
         start_time = time.time()
         all_neighbors = model.query(Q_test)
         query_time = time.time() - start_time
-        print(f"query() completed in {query_time:.2f}s\n")
+        print(f"query() completed in {query_time:.2f}s")
+        total_candidates = sum(len(n) for n in all_neighbors)
+        print(f"Total candidates: {total_candidates}")
         print()
 
-        first_query = Q_test[0]
-        lsh_indices = all_neighbors[0]
+        # Evaluate recall
+        n_eval = min(args.n_eval_queries, len(Q_test))
+        print(f"Evaluating recall on first {n_eval} queries:")
+        recall_results = evaluate_recall(Q_test, X, all_neighbors, n_eval, verbose=True)
+        print()
+        print(f"Average recall: {recall_results['avg_recall']:.4f}")
+        print(f"Queries with candidates: {recall_results['queries_with_candidates']}/{n_eval}")
+        print()
 
-        recall_score = None
-        intersection_size = None
-        gt_size = None
-        if len(lsh_indices) > 0:
-            k = len(lsh_indices)
-            top_k_indices = get_gt_top_k_indices(first_query, X, k)
-            recall_score, intersection_size, gt_size = recall(
-                lsh_indices, top_k_indices
-            )
-            print(
-                f"First query recall: {recall_score:.4f} ({intersection_size}/{gt_size})"
-            )
+        # Save report
+        if args.results_dir:
+            report_path = f"{args.results_dir}/report_h{args.n_hash_tables}_p{args.n_projections}_{time.strftime('%Y%m%d_%H%M%S')}.json"
+            os.makedirs(args.results_dir, exist_ok=True)
+
+            with open(report_path, "w") as f:
+                report_data = {
+                    "params": {
+                        "n_hash_tables": args.n_hash_tables,
+                        "n_projections": args.n_projections,
+                        "seed": args.seed,
+                        "n_queries": args.n_queries,
+                    },
+                    "runtimes": {
+                        "fit_time": fit_time,
+                        "query_time": query_time,
+                    },
+                    "stats": {
+                        "total_candidates": total_candidates,
+                    },
+                    "recall_evaluation": recall_results,
+                }
+                json.dump(report_data, f, indent=4)
+
+            print(f"Report saved to {report_path}")
         else:
-            print("No candidates found for first query")
-
-        report_path = f"results/report_{time.strftime('%Y%m%d_%H%M%S')}.json"
-        os.makedirs("results", exist_ok=True)
-
-        with open(report_path, "w") as f:
-            report_data = {
-                "params": {
-                    "n_hash_tables": args.n_hash_tables,
-                    "n_projections": args.n_projections,
-                    "seed": args.seed,
-                    "n_queries": args.n_queries,
-                },
-                "runtimes": {
-                    "fit_time": fit_time,
-                    "query_time": query_time,
-                },
-                "first_query_results": {
-                    "recall_score": recall_score,
-                    "intersection_size": intersection_size,
-                    "gt_size": gt_size,
-                },
-            }
-            json.dump(report_data, f, indent=4)
-
-        print(f"Report saved to {report_path}")
+            print("Runtimes:")
+            print(f"  fit_time: {fit_time:.2f}s")
+            print(f"  query_time: {query_time:.2f}s")
 
         # Save model if requested
         if args.save_dir:

@@ -128,8 +128,6 @@ void test() {
     // cleanup
     CUDA_CHECK(cudaFree(Q));
     CUDA_CHECK(cudaFree(Q_sig));
-    candidates.free();
-    index.free();
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
     CUDA_CHECK(cudaStreamDestroy(stream));
 }
@@ -222,7 +220,6 @@ void test_breakdown() {
     // free signatures and index
     CUDA_CHECK(cudaFree(X_signatures));
     CUDA_CHECK(cudaFree(X_hash));
-    index.free();
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
     CUDA_CHECK(cudaStreamDestroy(stream));
 }

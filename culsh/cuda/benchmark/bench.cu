@@ -309,8 +309,6 @@ int main(int argc, char* argv[]) {
     cout << "Report saved to " << report_path.string() << endl;
 
     // cleanup CUDA resources
-    candidates.free();
-    index.free();
     CUDA_CHECK(cudaFree(P));
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
     CUDA_CHECK(cudaStreamDestroy(stream));

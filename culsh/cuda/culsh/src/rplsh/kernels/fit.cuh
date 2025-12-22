@@ -225,9 +225,10 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
     // query memory requirements for radix sort
     void* d_temp_storage = nullptr;
     size_t temp_storage_bytes = 0;
-    cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, d_keys, d_temp_keys,
+    size_t sort_temp_bytes = 0;
+    cub::DeviceRadixSort::SortPairs(nullptr, sort_temp_bytes, d_keys, d_temp_keys,
                                     d_item_indices, d_temp_indices, n_items, 0, 8, stream);
-    ensure_temp_storage(&d_temp_storage, temp_storage_bytes, temp_storage_bytes);
+    ensure_temp_storage(&d_temp_storage, temp_storage_bytes, sort_temp_bytes);
 
     // sort items lexicographically by signature, from least -> most significant signature byte
     for (int byte_idx = n_projections - 1; byte_idx >= 0; --byte_idx) {

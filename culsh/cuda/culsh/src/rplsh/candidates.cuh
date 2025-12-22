@@ -52,12 +52,16 @@ struct Candidates {
     Candidates(Candidates&& other) noexcept
         : query_candidate_indices(other.query_candidate_indices),
           query_candidate_counts(other.query_candidate_counts),
-          query_candidate_offsets(other.query_candidate_offsets) {
+          query_candidate_offsets(other.query_candidate_offsets),
+          n_queries(other.n_queries),
+          n_total_candidates(other.n_total_candidates) {
 
         // nullify moved-from object to prevent double-free
         other.query_candidate_indices = nullptr;
         other.query_candidate_counts = nullptr;
         other.query_candidate_offsets = nullptr;
+        other.n_queries = 0;
+        other.n_total_candidates = 0;
     }
 
     /**
@@ -70,11 +74,15 @@ struct Candidates {
             query_candidate_indices = other.query_candidate_indices;
             query_candidate_counts = other.query_candidate_counts;
             query_candidate_offsets = other.query_candidate_offsets;
+            n_queries = other.n_queries;
+            n_total_candidates = other.n_total_candidates;
 
             // nullify moved-from object to prevent double-free
             other.query_candidate_indices = nullptr;
             other.query_candidate_counts = nullptr;
             other.query_candidate_offsets = nullptr;
+            other.n_queries = 0;
+            other.n_total_candidates = 0;
         }
         return *this;
     }

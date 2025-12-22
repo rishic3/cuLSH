@@ -13,7 +13,12 @@ namespace culsh {
 namespace rplsh {
 
 Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int n_samples,
-          int n_features, const RPLSHParams& params, float* P) {
+          int n_features, const RPLSHParams& params) {
+
+    // allocate projection matrix
+    size_t P_size = static_cast<size_t>(params.n_hash_tables) * params.n_projections * n_features;
+    float* P;
+    CUDA_CHECK(cudaMalloc(&P, P_size * sizeof(float)));
 
     // allocate X_hash
     float* X_hash;
@@ -34,16 +39,27 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int
                                       params.n_projections, X_sig);
     CUDA_CHECK(cudaFree(X_hash)); // done with X_hash
 
-    // build and return index
+    // build index
     auto index =
         detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_projections);
     CUDA_CHECK(cudaFree(X_sig));
+
+    // store projection matrix and metadata in index
+    index.P = P;
+    index.n_features = n_features;
+    index.seed = params.seed;
+    index.is_double = false;
 
     return index;
 }
 
 Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, int n_samples,
-          int n_features, const RPLSHParams& params, double* P) {
+          int n_features, const RPLSHParams& params) {
+
+    // allocate projection matrix
+    size_t P_size = static_cast<size_t>(params.n_hash_tables) * params.n_projections * n_features;
+    double* P;
+    CUDA_CHECK(cudaMalloc(&P, P_size * sizeof(double)));
 
     // allocate X_hash
     double* X_hash;
@@ -64,73 +80,86 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, in
                                        params.n_projections, X_sig);
     CUDA_CHECK(cudaFree(X_hash)); // done with X_hash
 
-    // build and return index
+    // build index
     auto index =
         detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_projections);
     CUDA_CHECK(cudaFree(X_sig));
+
+    // store projection matrix and metadata in index
+    index.P = P;
+    index.n_features = n_features;
+    index.seed = params.seed;
+    index.is_double = true;
 
     return index;
 }
 
 Candidates query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q,
-                         int n_queries, int n_features, const RPLSHParams& params, const float* P,
-                         const Index* index) {
+                         int n_queries, const Index& index) {
+
+    const float* P = index.P_float();
+    int n_features = index.n_features;
+    int n_hash_tables = index.n_hash_tables;
+    int n_projections = index.n_projections;
 
     // allocate Q_hash and hash Q
     float* Q_hash;
-    CUDA_CHECK(cudaMalloc(&Q_hash, static_cast<size_t>(n_queries) * params.n_hash_tables *
-                                       params.n_projections * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&Q_hash, static_cast<size_t>(n_queries) * n_hash_tables * n_projections *
+                                       sizeof(float)));
 
-    detail::hash<float>(cublas_handle, stream, Q, P, n_queries, n_features, params.n_hash_tables,
-                        params.n_projections, Q_hash);
+    detail::hash<float>(cublas_handle, stream, Q, P, n_queries, n_features, n_hash_tables,
+                        n_projections, Q_hash);
 
     // compute binary signatures from Q_hash
     int8_t* Q_sig;
-    CUDA_CHECK(cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * params.n_hash_tables *
-                                      params.n_projections * sizeof(int8_t)));
-    detail::compute_signatures<float>(stream, Q_hash, n_queries, params.n_hash_tables,
-                                      params.n_projections, Q_sig);
+    CUDA_CHECK(cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * n_hash_tables * n_projections *
+                                      sizeof(int8_t)));
+    detail::compute_signatures<float>(stream, Q_hash, n_queries, n_hash_tables, n_projections,
+                                      Q_sig);
     CUDA_CHECK(cudaFree(Q_hash));
 
     // query index for candidate indices
-    auto candidates = detail::query_index(stream, Q_sig, n_queries, params.n_hash_tables,
-                                          params.n_projections, index);
+    auto candidates =
+        detail::query_index(stream, Q_sig, n_queries, n_hash_tables, n_projections, &index);
     CUDA_CHECK(cudaFree(Q_sig));
 
     return candidates;
 }
 
 Candidates query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
-                         int n_queries, int n_features, const RPLSHParams& params, const double* P,
-                         const Index* index) {
+                         int n_queries, const Index& index) {
+
+    const double* P = index.P_double();
+    int n_features = index.n_features;
+    int n_hash_tables = index.n_hash_tables;
+    int n_projections = index.n_projections;
 
     // allocate Q_hash and hash Q
     double* Q_hash;
-    CUDA_CHECK(cudaMalloc(&Q_hash, static_cast<size_t>(n_queries) * params.n_hash_tables *
-                                       params.n_projections * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&Q_hash, static_cast<size_t>(n_queries) * n_hash_tables * n_projections *
+                                       sizeof(double)));
 
-    detail::hash<double>(cublas_handle, stream, Q, P, n_queries, n_features, params.n_hash_tables,
-                         params.n_projections, Q_hash);
+    detail::hash<double>(cublas_handle, stream, Q, P, n_queries, n_features, n_hash_tables,
+                         n_projections, Q_hash);
 
     // compute binary signatures from Q_hash
     int8_t* Q_sig;
-    CUDA_CHECK(cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * params.n_hash_tables *
-                                      params.n_projections * sizeof(int8_t)));
-    detail::compute_signatures<double>(stream, Q_hash, n_queries, params.n_hash_tables,
-                                       params.n_projections, Q_sig);
+    CUDA_CHECK(cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * n_hash_tables * n_projections *
+                                      sizeof(int8_t)));
+    detail::compute_signatures<double>(stream, Q_hash, n_queries, n_hash_tables, n_projections,
+                                       Q_sig);
     CUDA_CHECK(cudaFree(Q_hash));
 
     // query index for candidate indices
-    auto candidates = detail::query_index(stream, Q_sig, n_queries, params.n_hash_tables,
-                                          params.n_projections, index);
+    auto candidates =
+        detail::query_index(stream, Q_sig, n_queries, n_hash_tables, n_projections, &index);
     CUDA_CHECK(cudaFree(Q_sig));
 
     return candidates;
 }
 
 Candidates query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q,
-                         int n_queries, int n_features, const RPLSHParams& params, const float* P,
-                         const Index* index, const float* X_stored) {
+                         int n_queries, const Index& index, const float* X_stored) {
 
     // TODO: Hash query vectors using projections
     // TODO: Query index for candidate indices
@@ -140,8 +169,7 @@ Candidates query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, cons
 }
 
 Candidates query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
-                         int n_queries, int n_features, const RPLSHParams& params, const double* P,
-                         const Index* index, const double* X_stored) {
+                         int n_queries, const Index& index, const double* X_stored) {
 
     // TODO: Hash query vectors using projections (double precision)
     // TODO: Query index for candidate indices (double precision)

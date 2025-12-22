@@ -329,13 +329,14 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     // compute prefix sum for query offsets
     void* d_temp_storage = nullptr;
     size_t temp_storage_bytes = 0;
-    cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes,
-                                  candidates.query_candidate_counts,
-                                  candidates.query_candidate_offsets, n_queries, stream);
-    ensure_temp_storage(&d_temp_storage, temp_storage_bytes, temp_storage_bytes);
-    cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes,
-                                  candidates.query_candidate_counts,
-                                  candidates.query_candidate_offsets, n_queries, stream);
+    size_t scan_temp_bytes = 0;
+    CUDA_CHECK(cub::DeviceScan::ExclusiveSum(nullptr, scan_temp_bytes,
+                                             candidates.query_candidate_counts,
+                                             candidates.query_candidate_offsets, n_queries, stream));
+    ensure_temp_storage(&d_temp_storage, temp_storage_bytes, scan_temp_bytes);
+    CUDA_CHECK(cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes,
+                                             candidates.query_candidate_counts,
+                                             candidates.query_candidate_offsets, n_queries, stream));
 
     // allocate 'raw' total candidates
     // this allocates space for all candidates collected per query across all tables, including
