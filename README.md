@@ -1,4 +1,4 @@
-# cuLSH
+# cuLSH [WIP]
 
 Locality Sensitive Hashing on GPUs with Python bindings.
 
