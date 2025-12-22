@@ -349,7 +349,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     CUDA_CHECK(cudaMemcpyAsync(&last_query_count,
                                candidates.query_candidate_counts + (n_queries - 1), sizeof(size_t),
                                cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    CUDA_CHECK(cudaStreamSynchronize(stream));  // sync is needed to set total_raw_candidates on the host
 
     size_t total_raw_candidates = total_candidates_offset + last_query_count;
 
@@ -441,7 +441,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
         CUDA_CHECK(cudaMemcpyAsync(&last_query_count,
                                    candidates.query_candidate_counts + (n_queries - 1),
                                    sizeof(size_t), cudaMemcpyDeviceToHost, stream));
-        CUDA_CHECK(cudaStreamSynchronize(stream));
+        CUDA_CHECK(cudaStreamSynchronize(stream));  // sync is needed to set n_total_candidates on the host
 
         size_t total_unique_candidates = total_candidates_offset + last_query_count;
         candidates.n_total_candidates = total_unique_candidates;

@@ -301,7 +301,7 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
                                cudaMemcpyDeviceToHost, stream));
     CUDA_CHECK(cudaMemcpyAsync(&last_bucket_flag_val, d_bucket_flags + (n_items - 1), sizeof(int),
                                cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    CUDA_CHECK(cudaStreamSynchronize(stream));  // sync is needed to set n_total_buckets on the host
     index.n_total_buckets = last_bucket_idx_val + last_bucket_flag_val;
 
     // allocate all_candidate_indices - original row idx for all items in sorted order
