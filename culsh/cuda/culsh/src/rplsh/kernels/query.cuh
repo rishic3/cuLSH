@@ -6,9 +6,9 @@
 #include <cstdint>
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_scan.cuh>
-#include <cub/device/device_select.cuh>
 #include <cub/device/device_segmented_radix_sort.cuh>
 #include <cub/device/device_segmented_reduce.cuh>
+#include <cub/device/device_select.cuh>
 #include <cuda_runtime.h>
 #include <thrust/execution_policy.h>
 #include <thrust/sequence.h>
@@ -19,7 +19,7 @@ namespace detail {
 
 /**
  * @brief Binary search for the given query signature amongst all bucket signatures
- * @param[in] all_bucket_signatures Device pointer to array of all bucket signatures for each hash table
+ * @param[in] all_bucket_signatures Device pointer to array of all bucket signatures for each table
  * @param[in] table_start Start index of the table's buckets in all_bucket_signatures
  * @param[in] table_end End index of the table's buckets in all_bucket_signatures
  * @param[in] query_sig Device pointer to query signature
@@ -59,12 +59,14 @@ __device__ int find_bucket_in_table(const int8_t* all_bucket_signatures, int tab
 /**
  * @brief Find matching bucket for each (query, table) pair
  * @param[in] Q_sig Device pointer to query signature matrix
- * @param[in] all_bucket_signatures Device pointer to array of all bucket signatures for each hash table
- * @param[in] table_bucket_offsets Device pointer to array of offsets for each table's buckets in all_bucket_signatures
+ * @param[in] all_bucket_signatures Device pointer to array of all bucket signatures for each table
+ * @param[in] table_bucket_offsets Device pointer to array of offsets for each table's buckets in
+ * all_bucket_signatures
  * @param[in] n_queries Number of queries
  * @param[in] n_hash_tables Number of hash tables
  * @param[in] n_projections Number of projections (width of signature)
- * @param[out] matched_bucket_indices Device pointer to array of matching bucket indices for each (query, table) pair
+ * @param[out] matched_bucket_indices Device pointer to array of matching bucket indices for each
+ * (query, table) pair
  */
 __global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
                                              const int8_t* all_bucket_signatures,
@@ -96,11 +98,14 @@ __global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
 
 /**
  * @brief Count candidates for each (query, table) pair
- * @param[in] bucket_candidate_offsets Device pointer to array of offsets for each bucket's candidates in all_candidate_indices
- * @param[in] matched_bucket_indices Device pointer to array of matching bucket indices for each (query, table) pair
+ * @param[in] bucket_candidate_offsets Device pointer to array of offsets for each bucket's
+ * candidates in all_candidate_indices
+ * @param[in] matched_bucket_indices Device pointer to array of matching bucket indices for each
+ * (query, table) pair
  * @param[in] n_queries Number of queries
  * @param[in] n_hash_tables Number of hash tables
- * @param[out] candidate_counts Device pointer to array of candidate counts for each (query, table) pair
+ * @param[out] candidate_counts Device pointer to array of candidate counts for each (query, table)
+ * pair
  */
 __global__ void count_candidates_kernel(const int* bucket_candidate_offsets,
                                         const int* matched_bucket_indices, int n_queries,
@@ -123,7 +128,8 @@ __global__ void count_candidates_kernel(const int* bucket_candidate_offsets,
 
 /**
  * @brief Aggregate candidates per query across all tables
- * @param[in] candidate_counts Device pointer to array of candidate counts for each (query, table) pair
+ * @param[in] candidate_counts Device pointer to array of candidate counts for each (query, table)
+ * pair
  * @param[in] n_queries Number of queries
  * @param[in] n_hash_tables Number of hash tables
  * @param[out] query_candidate_counts Device pointer to array of candidate counts for each query
@@ -146,10 +152,12 @@ __global__ void aggregate_query_results_kernel(const int* candidate_counts, int 
 
 /**
  * @brief Precompute per-(query, table) exclusive offsets for candidate copies
- * @param[in] candidate_counts Device pointer to array of candidate counts for each (query, table) pair
+ * @param[in] candidate_counts Device pointer to array of candidate counts for each (query, table)
+ * pair
  * @param[in] n_queries Number of queries
  * @param[in] n_hash_tables Number of hash tables
- * @param[out] table_prefix_offsets Device pointer to array of offsets for each table's candidates for each query
+ * @param[out] table_prefix_offsets Device pointer to array of offsets for each table's candidates
+ * for each query
  */
 __global__ void compute_table_prefix_offsets_kernel(const int* candidate_counts, int n_queries,
                                                     int n_hash_tables,
@@ -170,11 +178,14 @@ __global__ void compute_table_prefix_offsets_kernel(const int* candidate_counts,
 
 /**
  * @brief Collect candidates from each (query, table) pair into an array
- * @param[in] bucket_candidate_offsets Device pointer to array of offsets for each bucket's candidates in all_candidate_indices
+ * @param[in] bucket_candidate_offsets Device pointer to array of offsets for each bucket's
+ * candidates in all_candidate_indices
  * @param[in] all_candidate_indices Device pointer to array of all candidate indices
- * @param[in] matched_bucket_indices Device pointer to array of matching bucket indices for each (query, table) pair
+ * @param[in] matched_bucket_indices Device pointer to array of matching bucket indices for each
+ * (query, table) pair
  * @param[in] query_candidate_offsets Device pointer to array of offsets for each query's candidates
- * @param[in] table_prefix_offsets Device pointer to array of offsets for each table's candidates for each query
+ * @param[in] table_prefix_offsets Device pointer to array of offsets for each table's candidates
+ * for each query
  * @param[in] n_queries Number of queries
  * @param[in] n_hash_tables Number of hash tables
  * @param[out] output_candidates Device pointer to array of collected candidates
@@ -251,7 +262,7 @@ __global__ void fix_boundaries_kernel(const size_t* offsets, int n_queries, int*
 
     size_t start = offsets[idx];
     size_t end = offsets[idx + 1];
-    
+
     // If segment is not empty, force first element to be kept
     if (start < end) {
         flags[start] = 1;
@@ -261,7 +272,8 @@ __global__ void fix_boundaries_kernel(const size_t* offsets, int n_queries, int*
 /**
  * @brief Query LSH index to find candidates
  * @param[in] stream CUDA stream
- * @param[in] Q_sig Device pointer to query signature matrix (n_queries x n_hash_tables * n_projections)
+ * @param[in] Q_sig Device pointer to query signature matrix (n_queries x n_hash_tables *
+ * n_projections)
  * @param[in] n_queries Number of input rows
  * @param[in] n_hash_tables Number of hash tables
  * @param[in] n_projections Number of projections
@@ -276,7 +288,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     dim3 grid_size_items((n_items + block_size.x - 1) / block_size.x);
     dim3 grid_size_queries((n_queries + block_size.x - 1) / block_size.x);
 
-    // For each query, we look at each hash table (aka, column of width n_projections) 
+    // For each query, we look at each hash table (aka, column of width n_projections)
     // and find the bucket that matches the query signature (if it exists).
     // For each such matching bucket, all candidates in the index are considered neighbors
     // of the query. Since the candidates across buckets are not disjoint, we deduplicate
@@ -326,7 +338,8 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
                                   candidates.query_candidate_offsets, n_queries, stream);
 
     // allocate 'raw' total candidates
-    // this creates space for all candidates collected per query across all tables, including duplicates
+    // this allocates space for all candidates collected per query across all tables, including
+    // duplicates
     size_t total_candidates_offset;
     size_t last_query_count;
     CUDA_CHECK(cudaMemcpyAsync(&total_candidates_offset,
@@ -338,10 +351,11 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     size_t total_raw_candidates = total_candidates_offset + last_query_count;
-    
+
     // set terminating value in offsets
-    CUDA_CHECK(cudaMemcpyAsync(candidates.query_candidate_offsets + n_queries, &total_raw_candidates,
-                               sizeof(size_t), cudaMemcpyHostToDevice, stream));
+    CUDA_CHECK(cudaMemcpyAsync(candidates.query_candidate_offsets + n_queries,
+                               &total_raw_candidates, sizeof(size_t), cudaMemcpyHostToDevice,
+                               stream));
 
     if (total_raw_candidates > 0) {
         int* d_raw_candidates;
@@ -354,12 +368,12 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
             index->bucket_candidate_offsets, index->all_candidate_indices, d_matched_bucket_indices,
             candidates.query_candidate_offsets, d_table_prefix_offsets, n_queries, n_hash_tables,
             d_raw_candidates);
-        
+
         // free temp storage
         CUDA_CHECK(cudaFree(d_matched_bucket_indices));
         CUDA_CHECK(cudaFree(d_candidate_counts));
         CUDA_CHECK(cudaFree(d_table_prefix_offsets));
-        
+
         // --- deduplicate candidates ---
         // 1. sort the raw candidate indices per-query
         // 2. mark unique candidate indices per segment
@@ -369,87 +383,102 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
         // 6. compact unique candidates to final array
         int* d_sorted_candidates;
         CUDA_CHECK(cudaMalloc(&d_sorted_candidates, total_raw_candidates * sizeof(int)));
-        
+
         // sort the raw candidate indices per-query
         size_t sort_temp_bytes = 0;
-        cub::DeviceSegmentedRadixSort::SortKeys(nullptr, sort_temp_bytes, d_raw_candidates, d_sorted_candidates,
-            total_raw_candidates, n_queries, candidates.query_candidate_offsets, candidates.query_candidate_offsets + 1,
-            0, sizeof(int)*8, stream);
+        cub::DeviceSegmentedRadixSort::SortKeys(
+            nullptr, sort_temp_bytes, d_raw_candidates, d_sorted_candidates, total_raw_candidates,
+            n_queries, candidates.query_candidate_offsets, candidates.query_candidate_offsets + 1,
+            0, sizeof(int) * 8, stream);
 
         ensure_temp_storage(&d_temp_storage, temp_storage_bytes, sort_temp_bytes);
-        cub::DeviceSegmentedRadixSort::SortKeys(d_temp_storage, temp_storage_bytes, d_raw_candidates, d_sorted_candidates,
-            total_raw_candidates, n_queries, candidates.query_candidate_offsets, candidates.query_candidate_offsets + 1,
-            0, sizeof(int)*8, stream);
-            
+        cub::DeviceSegmentedRadixSort::SortKeys(
+            d_temp_storage, temp_storage_bytes, d_raw_candidates, d_sorted_candidates,
+            total_raw_candidates, n_queries, candidates.query_candidate_offsets,
+            candidates.query_candidate_offsets + 1, 0, sizeof(int) * 8, stream);
+
         // mark unique candidate indices per segment
         // note that this checks global uniqueness - does not distinguish between segment boundaries
         int* d_flags;
         CUDA_CHECK(cudaMalloc(&d_flags, total_raw_candidates * sizeof(int)));
-        
+
         dim3 grid_size_total((total_raw_candidates + block_size.x - 1) / block_size.x);
-        mark_unique_kernel<<<grid_size_total, block_size, 0, stream>>>(d_sorted_candidates, total_raw_candidates, d_flags);
-        // fix boundaries - post-process segment boundaries to ensure start of each segment is marked as unique
-        fix_boundaries_kernel<<<grid_size_queries, block_size, 0, stream>>>(candidates.query_candidate_offsets, n_queries, d_flags);
-        
+        mark_unique_kernel<<<grid_size_total, block_size, 0, stream>>>(
+            d_sorted_candidates, total_raw_candidates, d_flags);
+        // fix boundaries - post-process segment boundaries to ensure start of each segment is
+        // marked as unique
+        fix_boundaries_kernel<<<grid_size_queries, block_size, 0, stream>>>(
+            candidates.query_candidate_offsets, n_queries, d_flags);
+
         // compute new candidate counts after de-duplication
         // segmented sum on the marked flags to get new counts per query
         size_t reduce_temp_bytes = 0;
-        cub::DeviceSegmentedReduce::Sum(nullptr, reduce_temp_bytes, d_flags, candidates.query_candidate_counts,
-            n_queries, candidates.query_candidate_offsets, candidates.query_candidate_offsets + 1, stream);
-            
+        cub::DeviceSegmentedReduce::Sum(
+            nullptr, reduce_temp_bytes, d_flags, candidates.query_candidate_counts, n_queries,
+            candidates.query_candidate_offsets, candidates.query_candidate_offsets + 1, stream);
+
         ensure_temp_storage(&d_temp_storage, temp_storage_bytes, reduce_temp_bytes);
-        
-        cub::DeviceSegmentedReduce::Sum(d_temp_storage, temp_storage_bytes, d_flags, candidates.query_candidate_counts,
-            n_queries, candidates.query_candidate_offsets, candidates.query_candidate_offsets + 1, stream);
-            
+
+        cub::DeviceSegmentedReduce::Sum(d_temp_storage, temp_storage_bytes, d_flags,
+                                        candidates.query_candidate_counts, n_queries,
+                                        candidates.query_candidate_offsets,
+                                        candidates.query_candidate_offsets + 1, stream);
+
         // compute new offsets via exclusive sum on the new counts
         size_t scan_temp_bytes = 0;
-        cub::DeviceScan::ExclusiveSum(nullptr, scan_temp_bytes, candidates.query_candidate_counts, candidates.query_candidate_offsets, n_queries, stream);
+        cub::DeviceScan::ExclusiveSum(nullptr, scan_temp_bytes, candidates.query_candidate_counts,
+                                      candidates.query_candidate_offsets, n_queries, stream);
         ensure_temp_storage(&d_temp_storage, temp_storage_bytes, scan_temp_bytes);
-        cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes, candidates.query_candidate_counts, candidates.query_candidate_offsets, n_queries, stream);
-        
+        cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes,
+                                      candidates.query_candidate_counts,
+                                      candidates.query_candidate_offsets, n_queries, stream);
+
         // store total unique candidates to candidates object
         CUDA_CHECK(cudaMemcpyAsync(&total_candidates_offset,
-                               candidates.query_candidate_offsets + (n_queries - 1), sizeof(size_t),
-                               cudaMemcpyDeviceToHost, stream));
+                                   candidates.query_candidate_offsets + (n_queries - 1),
+                                   sizeof(size_t), cudaMemcpyDeviceToHost, stream));
         CUDA_CHECK(cudaMemcpyAsync(&last_query_count,
-                               candidates.query_candidate_counts + (n_queries - 1), sizeof(size_t),
-                               cudaMemcpyDeviceToHost, stream));
+                                   candidates.query_candidate_counts + (n_queries - 1),
+                                   sizeof(size_t), cudaMemcpyDeviceToHost, stream));
         CUDA_CHECK(cudaStreamSynchronize(stream));
-        
+
         size_t total_unique_candidates = total_candidates_offset + last_query_count;
         candidates.n_total_candidates = total_unique_candidates;
-        
+
         // set terminating value
-        CUDA_CHECK(cudaMemcpyAsync(candidates.query_candidate_offsets + n_queries, &total_unique_candidates,
-                               sizeof(size_t), cudaMemcpyHostToDevice, stream));
+        CUDA_CHECK(cudaMemcpyAsync(candidates.query_candidate_offsets + n_queries,
+                                   &total_unique_candidates, sizeof(size_t), cudaMemcpyHostToDevice,
+                                   stream));
 
         // compact unique candidates to final array
         if (total_unique_candidates > 0) {
-            CUDA_CHECK(cudaMalloc(&candidates.query_candidate_indices, total_unique_candidates * sizeof(int)));
-            
+            CUDA_CHECK(cudaMalloc(&candidates.query_candidate_indices,
+                                  total_unique_candidates * sizeof(int)));
+
             int* d_num_selected_out;
             CUDA_CHECK(cudaMalloc(&d_num_selected_out, sizeof(int)));
-            
+
             size_t select_temp_bytes = 0;
-            cub::DeviceSelect::Flagged(nullptr, select_temp_bytes, d_sorted_candidates, d_flags, 
-                candidates.query_candidate_indices, d_num_selected_out, total_raw_candidates, stream);
-                
+            cub::DeviceSelect::Flagged(nullptr, select_temp_bytes, d_sorted_candidates, d_flags,
+                                       candidates.query_candidate_indices, d_num_selected_out,
+                                       total_raw_candidates, stream);
+
             ensure_temp_storage(&d_temp_storage, temp_storage_bytes, select_temp_bytes);
-            
-            cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_sorted_candidates, d_flags, 
-                candidates.query_candidate_indices, d_num_selected_out, total_raw_candidates, stream);
-                
+
+            cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_sorted_candidates,
+                                       d_flags, candidates.query_candidate_indices,
+                                       d_num_selected_out, total_raw_candidates, stream);
+
             CUDA_CHECK(cudaFree(d_num_selected_out));
         } else {
-             candidates.query_candidate_indices = nullptr;
+            candidates.query_candidate_indices = nullptr;
         }
 
         // cleanup
         CUDA_CHECK(cudaFree(d_raw_candidates));
         CUDA_CHECK(cudaFree(d_sorted_candidates));
         CUDA_CHECK(cudaFree(d_flags));
-        
+
     } else {
         candidates.query_candidate_indices = nullptr;
         candidates.n_total_candidates = 0;

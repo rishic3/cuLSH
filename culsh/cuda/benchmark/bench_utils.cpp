@@ -148,17 +148,17 @@ RecallResults evaluate_recall(const float* Q_all, const float* X, int n_samples,
         }
     }
 
-    results.avg_recall =
-        (results.queries_with_candidates > 0) ? total_recall / results.queries_with_candidates : 0.0;
+    results.avg_recall = (results.queries_with_candidates > 0)
+                             ? total_recall / results.queries_with_candidates
+                             : 0.0;
 
     if (verbose) {
-        std::cout << "\nAverage recall: " << std::fixed << std::setprecision(4) << results.avg_recall
-                  << " (" << results.queries_with_candidates << "/" << n_eval_queries
-                  << " queries with candidates)" << std::endl;
+        std::cout << "\nAverage recall: " << std::fixed << std::setprecision(4)
+                  << results.avg_recall << " (" << results.queries_with_candidates << "/"
+                  << n_eval_queries << " queries with candidates)" << std::endl;
     }
 
     return results;
 }
 
 } // namespace bench
-

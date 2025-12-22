@@ -50,7 +50,7 @@ culsh::rplsh::Index main_fit(cublasHandle_t cublas_handle, cudaStream_t stream, 
 
     // build and return index
     auto index = culsh::rplsh::detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables,
-                                                   params.n_projections);
+                                                 params.n_projections);
     CUDA_CHECK(cudaFree(X_sig));
 
     return index;

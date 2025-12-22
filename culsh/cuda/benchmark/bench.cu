@@ -191,7 +191,8 @@ int main(int argc, char* argv[]) {
     // read data
     int n_samples, n_features, n_queries_data, n_features_q;
     float* X = bench::read_fvecs(conf.data_dir / "sift_base.fvecs", n_samples, n_features);
-    float* Q_all = bench::read_fvecs(conf.data_dir / "sift_query.fvecs", n_queries_data, n_features_q);
+    float* Q_all =
+        bench::read_fvecs(conf.data_dir / "sift_query.fvecs", n_queries_data, n_features_q);
 
     if (n_features != n_features_q) {
         throw runtime_error("Dimension mismatch between fit and query data");
@@ -240,7 +241,7 @@ int main(int argc, char* argv[]) {
 
     // copy candidate results to host for recall evaluation
     const int n_eval_queries = min(20, n_test_queries);
-    
+
     vector<size_t> h_candidate_counts(n_test_queries);
     vector<size_t> h_candidate_offsets(n_test_queries + 1);
     CUDA_CHECK(cudaMemcpy(h_candidate_counts.data(), candidates.query_candidate_counts,
@@ -256,9 +257,9 @@ int main(int argc, char* argv[]) {
     }
 
     // evaluate recall
-    bench::RecallResults recall_results = bench::evaluate_recall(
-        Q_all, X, n_samples, n_features, n_eval_queries,
-        h_candidate_counts, h_candidate_offsets, h_all_candidates, /*verbose=*/true);
+    bench::RecallResults recall_results =
+        bench::evaluate_recall(Q_all, X, n_samples, n_features, n_eval_queries, h_candidate_counts,
+                               h_candidate_offsets, h_all_candidates, /*verbose=*/true);
 
     // save report
     fs::path abs_save_dir = fs::absolute(conf.save_dir);
@@ -291,12 +292,14 @@ int main(int argc, char* argv[]) {
     report << "    },\n";
     report << "    \"recall_evaluation\": {\n";
     report << "        \"n_eval_queries\": " << recall_results.n_eval_queries << ",\n";
-    report << "        \"queries_with_candidates\": " << recall_results.queries_with_candidates << ",\n";
+    report << "        \"queries_with_candidates\": " << recall_results.queries_with_candidates
+           << ",\n";
     report << "        \"avg_recall\": " << recall_results.avg_recall << ",\n";
     report << "        \"per_query_recall\": [";
     for (size_t i = 0; i < recall_results.per_query_recall.size(); ++i) {
         report << recall_results.per_query_recall[i];
-        if (i < recall_results.per_query_recall.size() - 1) report << ", ";
+        if (i < recall_results.per_query_recall.size() - 1)
+            report << ", ";
     }
     report << "]\n";
     report << "    }\n";

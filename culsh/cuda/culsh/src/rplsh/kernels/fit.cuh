@@ -196,7 +196,7 @@ __global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* so
  * @return Index object
  */
 Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_hash_tables,
-                  int n_projections) {
+                int n_projections) {
     size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
     dim3 block_size(256);
     dim3 grid_size((n_items + block_size.x - 1) / block_size.x);
@@ -204,8 +204,8 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
     // Create a searchable index structure from the given signature matrix.
     // The index structure is a flat array of all candidates, sorted first by table (aka
     // column of width n_projections), then lexicographically by signature within each table.
-    // (In this sense the flat array is 'column-major' in the sense that tables are stored contiguously.)
-    // Note that signatures are unique within each table, but not across tables.
+    // (In this sense the flat array is 'column-major' in the sense that tables are stored
+    // contiguously.) Note that signatures are unique within each table, but not across tables.
 
     // allocate temp storage
     uint32_t *d_item_indices, *d_temp_indices;
@@ -253,7 +253,7 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
     mark_boundaries_kernel<<<grid_size, block_size, 0, stream>>>(
         X_sig, d_item_indices, n_samples, n_hash_tables, n_projections, n_items, d_bucket_flags,
         d_table_flags);
-    
+
     // free sort buffers
     CUDA_CHECK(cudaFree(d_keys));
     CUDA_CHECK(cudaFree(d_temp_keys));
@@ -270,7 +270,8 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
     // d_bucket_flags = [1, 0, 0, 1, 0, 0, 1, 0, ...]
     // d_bucket_scan = [0, 1, 1, 2, 2, 2, 3, 3, ...]
     size_t scan_temp_bytes = 0;
-    cub::DeviceScan::ExclusiveSum(nullptr, scan_temp_bytes, d_bucket_flags, d_bucket_scan, n_items, stream);
+    cub::DeviceScan::ExclusiveSum(nullptr, scan_temp_bytes, d_bucket_flags, d_bucket_scan, n_items,
+                                  stream);
     ensure_temp_storage(&d_temp_storage, temp_storage_bytes, scan_temp_bytes);
     cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes, d_bucket_flags, d_bucket_scan,
                                   n_items, stream);
@@ -280,18 +281,16 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
 
     // query memory requirements for select
     size_t select_temp_storage_bytes = 0;
-    cub::DeviceSelect::Flagged(nullptr, select_temp_storage_bytes, d_bucket_scan,
-                               d_table_flags, index.table_bucket_offsets, d_num_selected_out,
-                               n_items, stream);
+    cub::DeviceSelect::Flagged(nullptr, select_temp_storage_bytes, d_bucket_scan, d_table_flags,
+                               index.table_bucket_offsets, d_num_selected_out, n_items, stream);
     ensure_temp_storage(&d_temp_storage, temp_storage_bytes, select_temp_storage_bytes);
 
     // select from d_bucket_scan using d_table_flags to get table offsets. e.g.
     // d_bucket_scan = [0, 1, 1, 2, 2, 2, 3, 3, ...]
     // d_table_flags = [1, 0, 0, 1, 0, 0, 1, 0, ...]
     // table_bucket_offsets = [0, 2, 3, ...]
-    cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_bucket_scan,
-                               d_table_flags, index.table_bucket_offsets, d_num_selected_out,
-                               n_items, stream);
+    cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_bucket_scan, d_table_flags,
+                               index.table_bucket_offsets, d_num_selected_out, n_items, stream);
 
     // get total number of unique buckets:
     // last_bucket_idx_val (buckets seen before last item) + last_bucket_flag_val (whether last
