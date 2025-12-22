@@ -12,6 +12,7 @@ pip install .
 ## Development
 
 ```bash
+cd culsh/python
 pip install -e .
 
 # If making C++ changes, rebuild .so
