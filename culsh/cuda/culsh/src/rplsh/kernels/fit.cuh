@@ -16,6 +16,13 @@ namespace detail {
 
 /**
  * @brief Extract n-th byte of signature for radix sort
+ * @param[in] X_sig Device pointer to signature matrix
+ * @param[in] item_indices Device pointer to array of item indices
+ * @param[in] n_samples Number of input rows
+ * @param[in] n_hash_tables Number of hash tables
+ * @param[in] n_projections Number of projections
+ * @param[in] byte_idx Index of byte to extract
+ * @param[out] d_keys Device pointer to array of keys
  */
 __global__ void extract_byte_key_kernel(const int8_t* X_sig, const uint32_t* item_indices,
                                         int n_samples, int n_hash_tables, int n_projections,
@@ -40,6 +47,10 @@ __global__ void extract_byte_key_kernel(const int8_t* X_sig, const uint32_t* ite
 
 /**
  * @brief Extract table id for final radix sort
+ * @param[in] item_indices Device pointer to array of item indices
+ * @param[in] n_samples Number of input rows
+ * @param[in] n_items Number of items (n_samples * n_hash_tables)
+ * @param[out] d_keys Device pointer to array of keys
  */
 __global__ void extract_table_id_key_kernel(const uint32_t* item_indices, int n_samples,
                                             size_t n_items, uint8_t* d_keys) {
@@ -53,6 +64,10 @@ __global__ void extract_table_id_key_kernel(const uint32_t* item_indices, int n_
 
 /**
  * @brief Check if two signatures are equal
+ * @param[in] sig1 Device pointer to first signature
+ * @param[in] sig2 Device pointer to second signature
+ * @param[in] n Number of projections
+ * @return True if signatures are equal, false otherwise
  */
 __device__ bool are_signatures_equal(const int8_t* sig1, const int8_t* sig2, int n) {
     for (int i = 0; i < n; ++i) {
@@ -64,6 +79,14 @@ __device__ bool are_signatures_equal(const int8_t* sig1, const int8_t* sig2, int
 
 /**
  * @brief Mark first item of each unique bucket and each new table after sort
+ * @param[in] X_sig Device pointer to signature matrix
+ * @param[in] sorted_item_indices Device pointer to array of sorted item indices
+ * @param[in] n_samples Number of input rows
+ * @param[in] n_hash_tables Number of hash tables
+ * @param[in] n_projections Number of projections
+ * @param[in] n_items Number of items (n_samples * n_hash_tables)
+ * @param[out] d_bucket_flags Device pointer to array of bucket flags
+ * @param[out] d_table_flags Device pointer to array of table flags
  */
 __global__ void mark_boundaries_kernel(const int8_t* X_sig, const uint32_t* sorted_item_indices,
                                        int n_samples, int n_hash_tables, int n_projections,
@@ -111,6 +134,17 @@ __global__ void mark_boundaries_kernel(const int8_t* X_sig, const uint32_t* sort
 
 /**
  * @brief Scatter sorted data into final flat index
+ * @param[in] X_sig Device pointer to signature matrix
+ * @param[in] sorted_item_indices Device pointer to array of sorted item indices
+ * @param[in] d_bucket_flags Device pointer to array of bucket flags
+ * @param[in] d_bucket_scan Device pointer to array of exclusive scan on bucket flags
+ * @param[in] n_samples Number of input rows
+ * @param[in] n_hash_tables Number of hash tables
+ * @param[in] n_projections Number of projections
+ * @param[in] n_items Number of items (n_samples * n_hash_tables)
+ * @param[out] d_bucket_signatures Device pointer to array of bucket signatures
+ * @param[out] d_bucket_candidate_offsets Device pointer to array of bucket candidate offsets
+ * @param[out] d_all_candidates Device pointer to array of all candidate indices
  */
 __global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* sorted_item_indices,
                                          const int* d_bucket_flags, const int* d_bucket_scan,
@@ -153,19 +187,25 @@ __global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* so
 }
 
 /**
- * @brief Build flat LSH index structure on GPU
+ * @brief Fit flat LSH index structure on GPU
  * @param[in] stream CUDA stream
- * @param[in] X_sig signature matrix (n_samples x n_hash_tables * n_projections)
+ * @param[in] X_sig Device pointer to signature matrix (n_samples x n_hash_tables * n_projections)
  * @param[in] n_samples Number of input rows
  * @param[in] n_hash_tables Number of hash tables
  * @param[in] n_projections Number of projections
- * @param[out] index Device index
+ * @return Index object
  */
-Index build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_hash_tables,
+Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_hash_tables,
                   int n_projections) {
     size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
     dim3 block_size(256);
     dim3 grid_size((n_items + block_size.x - 1) / block_size.x);
+
+    // Create a searchable index structure from the given signature matrix.
+    // The index structure is a flat array of all candidates, sorted first by table (aka
+    // column of width n_projections), then lexicographically by signature within each table.
+    // (In this sense the flat array is 'column-major' in the sense that tables are stored contiguously.)
+    // Note that signatures are unique within each table, but not across tables.
 
     // allocate temp storage
     uint32_t *d_item_indices, *d_temp_indices;
@@ -187,7 +227,7 @@ Index build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n
     size_t temp_storage_bytes = 0;
     cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, d_keys, d_temp_keys,
                                     d_item_indices, d_temp_indices, n_items, 0, 8, stream);
-    CUDA_CHECK(cudaMalloc(&d_temp_storage, temp_storage_bytes));
+    ensure_temp_storage(&d_temp_storage, temp_storage_bytes, temp_storage_bytes);
 
     // sort items lexicographically by signature, from least -> most significant signature byte
     for (int byte_idx = n_projections - 1; byte_idx >= 0; --byte_idx) {
@@ -213,6 +253,11 @@ Index build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n
     mark_boundaries_kernel<<<grid_size, block_size, 0, stream>>>(
         X_sig, d_item_indices, n_samples, n_hash_tables, n_projections, n_items, d_bucket_flags,
         d_table_flags);
+    
+    // free sort buffers
+    CUDA_CHECK(cudaFree(d_keys));
+    CUDA_CHECK(cudaFree(d_temp_keys));
+    CUDA_CHECK(cudaFree(d_temp_indices));
 
     // initialize index
     Index index;
@@ -224,6 +269,9 @@ Index build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n
     // run exclusive sum to get bucket offsets from binary flags, e.g.
     // d_bucket_flags = [1, 0, 0, 1, 0, 0, 1, 0, ...]
     // d_bucket_scan = [0, 1, 1, 2, 2, 2, 3, 3, ...]
+    size_t scan_temp_bytes = 0;
+    cub::DeviceScan::ExclusiveSum(nullptr, scan_temp_bytes, d_bucket_flags, d_bucket_scan, n_items, stream);
+    ensure_temp_storage(&d_temp_storage, temp_storage_bytes, scan_temp_bytes);
     cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes, d_bucket_flags, d_bucket_scan,
                                   n_items, stream);
 
@@ -231,18 +279,17 @@ Index build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n
     CUDA_CHECK(cudaMalloc(&d_num_selected_out, sizeof(int)));
 
     // query memory requirements for select
-    void* d_select_temp_storage = nullptr;
     size_t select_temp_storage_bytes = 0;
-    cub::DeviceSelect::Flagged(d_select_temp_storage, select_temp_storage_bytes, d_bucket_scan,
+    cub::DeviceSelect::Flagged(nullptr, select_temp_storage_bytes, d_bucket_scan,
                                d_table_flags, index.table_bucket_offsets, d_num_selected_out,
                                n_items, stream);
-    CUDA_CHECK(cudaMalloc(&d_select_temp_storage, select_temp_storage_bytes));
+    ensure_temp_storage(&d_temp_storage, temp_storage_bytes, select_temp_storage_bytes);
 
     // select from d_bucket_scan using d_table_flags to get table offsets. e.g.
     // d_bucket_scan = [0, 1, 1, 2, 2, 2, 3, 3, ...]
     // d_table_flags = [1, 0, 0, 1, 0, 0, 1, 0, ...]
     // table_bucket_offsets = [0, 2, 3, ...]
-    cub::DeviceSelect::Flagged(d_select_temp_storage, select_temp_storage_bytes, d_bucket_scan,
+    cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_bucket_scan,
                                d_table_flags, index.table_bucket_offsets, d_num_selected_out,
                                n_items, stream);
 
@@ -282,17 +329,13 @@ Index build_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n
         n_projections, n_items, index.all_bucket_signatures, index.bucket_candidate_offsets,
         index.all_candidate_indices);
 
-    // cleanup temp stuff
+    // cleanup
     CUDA_CHECK(cudaFree(d_temp_storage));
     CUDA_CHECK(cudaFree(d_item_indices));
-    CUDA_CHECK(cudaFree(d_temp_indices));
-    CUDA_CHECK(cudaFree(d_keys));
-    CUDA_CHECK(cudaFree(d_temp_keys));
     CUDA_CHECK(cudaFree(d_bucket_flags));
     CUDA_CHECK(cudaFree(d_table_flags));
     CUDA_CHECK(cudaFree(d_bucket_scan));
     CUDA_CHECK(cudaFree(d_num_selected_out));
-    CUDA_CHECK(cudaFree(d_select_temp_storage));
 
     return index;
 }

@@ -1,9 +1,9 @@
 #include "candidates.cuh"
 #include "index.cuh"
-#include "kernels/build_index.cuh"
+#include "kernels/fit.cuh"
 #include "kernels/hash.cuh"
 #include "kernels/projections.cuh"
-#include "kernels/query_index.cuh"
+#include "kernels/query.cuh"
 #include <cuda_runtime.h>
 #include <culsh/rplsh/params.hpp>
 #include <culsh/rplsh/rplsh.hpp>
@@ -36,7 +36,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int
 
     // build and return index
     auto index =
-        detail::build_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_projections);
+        detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_projections);
     CUDA_CHECK(cudaFree(X_sig));
 
     return index;
@@ -66,7 +66,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, in
 
     // build and return index
     auto index =
-        detail::build_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_projections);
+        detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_projections);
     CUDA_CHECK(cudaFree(X_sig));
 
     return index;

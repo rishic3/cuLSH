@@ -13,22 +13,26 @@ struct Index {
     /**
      * @brief Device pointer to flat sorted array of all candidate indices.
      * Candidates for each signature stored contiguously starting at signature_start_indices[i].
+     * Size: [n_total_candidates]
      */
     int* all_candidate_indices = nullptr;
 
     /**
      * @brief Device pointer to flat sorted array of all bucket signatures for each hash tables.
      * Bucket signatures for each hash table stored contiguously starting at table_start_indices[i].
+     * Size: [n_total_buckets * n_projections]
      */
     int8_t* all_bucket_signatures = nullptr;
 
     /**
      * @brief Start idx of each bucket's candidate indices in all_candidate_indices.
+     * Size: [n_total_buckets + 1]
      */
     int* bucket_candidate_offsets = nullptr;
 
     /**
      * @brief Start idx of each table's signatures in all_bucket_signatures.
+     * Size: [n_hash_tables + 1]
      */
     int* table_bucket_offsets = nullptr;
 

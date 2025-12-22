@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <cuda_runtime.h>
 
 namespace culsh {
@@ -12,16 +11,20 @@ namespace rplsh {
 struct Candidates {
     /**
      * @brief Device pointer to array of candidate indices for all queries.
+     * Candidates for each query stored contiguously starting at query_candidate_offsets[i].
+     * Size: [n_total_candidates]
      */
     int* query_candidate_indices = nullptr;
 
     /**
      * @brief Device pointer to array of number of candidates per query.
+     * Size: [n_queries]
      */
     size_t* query_candidate_counts = nullptr;
 
     /**
      * @brief Start idx of each query's candidate indices in query_candidate_indices.
+     * Size: [n_queries + 1]
      */
     size_t* query_candidate_offsets = nullptr;
 

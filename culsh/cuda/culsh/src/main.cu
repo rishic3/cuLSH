@@ -1,16 +1,13 @@
 #include "rplsh/index.cuh"
-#include "rplsh/kernels/build_index.cuh"
+#include "rplsh/kernels/fit.cuh"
 #include "rplsh/kernels/hash.cuh"
 #include "rplsh/kernels/projections.cuh"
-#include "rplsh/kernels/query_index.cuh"
+#include "rplsh/kernels/query.cuh"
 
 #include <chrono>
-#include <cmath>
 #include <cuda_runtime.h>
 #include <curand.h>
-#include <iomanip>
 #include <iostream>
-#include <vector>
 
 struct Params {
     int n_hash_tables;
@@ -52,7 +49,7 @@ culsh::rplsh::Index main_fit(cublasHandle_t cublas_handle, cudaStream_t stream, 
     CUDA_CHECK(cudaFree(X_hash)); // done with X_hash
 
     // build and return index
-    auto index = culsh::rplsh::detail::build_index(stream, X_sig, n_samples, params.n_hash_tables,
+    auto index = culsh::rplsh::detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables,
                                                    params.n_projections);
     CUDA_CHECK(cudaFree(X_sig));
 
@@ -60,8 +57,8 @@ culsh::rplsh::Index main_fit(cublasHandle_t cublas_handle, cudaStream_t stream, 
 }
 
 void test() {
-    const int n = 10000000;
-    const int d = 512;
+    const int n = 1000;
+    const int d = 128;
     const int n_hash_tables = 64;
     const int n_projections = 8;
     const int n_total_buckets = n_hash_tables * n_projections;
@@ -206,7 +203,7 @@ void test_breakdown() {
     auto start_build_index = std::chrono::high_resolution_clock::now();
     // build index
     culsh::rplsh::Index index =
-        culsh::rplsh::detail::build_index(stream, X_signatures, n, n_hash_tables, n_projections);
+        culsh::rplsh::detail::fit_index(stream, X_signatures, n, n_hash_tables, n_projections);
     // CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end_build_index = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> build_index_time = end_build_index - start_build_index;

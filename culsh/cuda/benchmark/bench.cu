@@ -2,10 +2,10 @@
 
 #include "../culsh/src/rplsh/candidates.cuh"
 #include "../culsh/src/rplsh/index.cuh"
-#include "../culsh/src/rplsh/kernels/build_index.cuh"
+#include "../culsh/src/rplsh/kernels/fit.cuh"
 #include "../culsh/src/rplsh/kernels/hash.cuh"
 #include "../culsh/src/rplsh/kernels/projections.cuh"
-#include "../culsh/src/rplsh/kernels/query_index.cuh"
+#include "../culsh/src/rplsh/kernels/query.cuh"
 #include "../culsh/src/rplsh/utils/utils.cuh"
 
 #include <chrono>
@@ -62,7 +62,7 @@ culsh::rplsh::Index cuda_fit(cublasHandle_t cublas_handle, cudaStream_t stream, 
 
     // build and return index
     auto index =
-        culsh::rplsh::detail::build_index(stream, X_sig, n_samples, n_hash_tables, n_projections);
+        culsh::rplsh::detail::fit_index(stream, X_sig, n_samples, n_hash_tables, n_projections);
     CUDA_CHECK(cudaFree(X_sig));
     CUDA_CHECK(cudaFree(X_gpu));
 
