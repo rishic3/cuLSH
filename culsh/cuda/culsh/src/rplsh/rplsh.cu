@@ -37,7 +37,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int
                                       params.n_projections * sizeof(int8_t)));
     detail::compute_signatures<float>(stream, X_hash, n_samples, params.n_hash_tables,
                                       params.n_projections, X_sig);
-    CUDA_CHECK(cudaFree(X_hash)); // done with X_hash
+    CUDA_CHECK(cudaFree(X_hash));
 
     // build index
     auto index =
@@ -78,7 +78,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, in
                                       params.n_projections * sizeof(int8_t)));
     detail::compute_signatures<double>(stream, X_hash, n_samples, params.n_hash_tables,
                                        params.n_projections, X_sig);
-    CUDA_CHECK(cudaFree(X_hash)); // done with X_hash
+    CUDA_CHECK(cudaFree(X_hash));
 
     // build index
     auto index =

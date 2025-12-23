@@ -330,13 +330,13 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     void* d_temp_storage = nullptr;
     size_t temp_storage_bytes = 0;
     size_t scan_temp_bytes = 0;
-    CUDA_CHECK(cub::DeviceScan::ExclusiveSum(nullptr, scan_temp_bytes,
-                                             candidates.query_candidate_counts,
-                                             candidates.query_candidate_offsets, n_queries, stream));
+    CUDA_CHECK(
+        cub::DeviceScan::ExclusiveSum(nullptr, scan_temp_bytes, candidates.query_candidate_counts,
+                                      candidates.query_candidate_offsets, n_queries, stream));
     ensure_temp_storage(&d_temp_storage, temp_storage_bytes, scan_temp_bytes);
-    CUDA_CHECK(cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes,
-                                             candidates.query_candidate_counts,
-                                             candidates.query_candidate_offsets, n_queries, stream));
+    CUDA_CHECK(cub::DeviceScan::ExclusiveSum(
+        d_temp_storage, temp_storage_bytes, candidates.query_candidate_counts,
+        candidates.query_candidate_offsets, n_queries, stream));
 
     // allocate 'raw' total candidates
     // this allocates space for all candidates collected per query across all tables, including
@@ -349,7 +349,8 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     CUDA_CHECK(cudaMemcpyAsync(&last_query_count,
                                candidates.query_candidate_counts + (n_queries - 1), sizeof(size_t),
                                cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaStreamSynchronize(stream));  // sync is needed to set total_raw_candidates on the host
+    CUDA_CHECK(
+        cudaStreamSynchronize(stream)); // sync is needed to set total_raw_candidates on the host
 
     size_t total_raw_candidates = total_candidates_offset + last_query_count;
 
@@ -441,7 +442,8 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
         CUDA_CHECK(cudaMemcpyAsync(&last_query_count,
                                    candidates.query_candidate_counts + (n_queries - 1),
                                    sizeof(size_t), cudaMemcpyDeviceToHost, stream));
-        CUDA_CHECK(cudaStreamSynchronize(stream));  // sync is needed to set n_total_candidates on the host
+        CUDA_CHECK(
+            cudaStreamSynchronize(stream)); // sync is needed to set n_total_candidates on the host
 
         size_t total_unique_candidates = total_candidates_offset + last_query_count;
         candidates.n_total_candidates = total_unique_candidates;
