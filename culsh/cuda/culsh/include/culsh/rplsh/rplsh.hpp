@@ -17,7 +17,7 @@ struct Index;
 struct Candidates;
 
 /**
- * @brief Fit the Random Projection LSH model
+ * @brief Fit the RPLSH index
  *
  * @param[in] cublas_handle cuBLAS handle
  * @param[in] stream CUDA stream
@@ -31,7 +31,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int
           int n_features, const RPLSHParams& params);
 
 /**
- * @brief Fit the Random Projection LSH model (double precision)
+ * @brief Fit the RPLSH index (double precision)
  *
  * @param[in] cublas_handle cuBLAS handle
  * @param[in] stream CUDA stream
@@ -45,7 +45,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, in
           int n_features, const RPLSHParams& params);
 
 /**
- * @brief Query the Random Projection LSH model for candidate neighbor indices
+ * @brief Query the RPLSH index for candidate neighbor indices
  *
  * @param[in] cublas_handle cuBLAS handle
  * @param[in] stream CUDA stream
@@ -54,11 +54,11 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, in
  * @param[in] index RPLSH index (contains projection matrix)
  * @return Candidates containing candidate indices for each query
  */
-Candidates query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q,
-                         int n_queries, const Index& index);
+Candidates query(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q, int n_queries,
+                 const Index& index);
 
 /**
- * @brief Query the Random Projection LSH model for candidate neighbor indices (double precision)
+ * @brief Query the RPLSH index for candidate neighbor indices (double precision)
  *
  * @param[in] cublas_handle cuBLAS handle
  * @param[in] stream CUDA stream
@@ -67,8 +67,36 @@ Candidates query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, cons
  * @param[in] index RPLSH index (contains projection matrix)
  * @return Candidates containing candidate indices for each query
  */
-Candidates query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
-                         int n_queries, const Index& index);
+Candidates query(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q, int n_queries,
+                 const Index& index);
+
+/**
+ * @brief Simultaneously fit and query the RPLSH index
+ *
+ * @param[in] cublas_handle cuBLAS handle
+ * @param[in] stream CUDA stream
+ * @param[in] X Input data matrix (row-major)
+ * @param[in] n_samples Number of data points
+ * @param[in] n_features Number of features
+ * @param[in] params LSH params
+ * @return Candidates containing candidate indices for each query
+ */
+Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X,
+                     int n_samples, int n_features, const RPLSHParams& params);
+
+/**
+ * @brief Simultaneously fit and query the RPLSH index (double precision)
+ *
+ * @param[in] cublas_handle cuBLAS handle
+ * @param[in] stream CUDA stream
+ * @param[in] X Input data matrix (row-major)
+ * @param[in] n_samples Number of data points
+ * @param[in] n_features Number of features
+ * @param[in] params LSH params
+ * @return Candidates containing candidate indices for each query
+ */
+Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X,
+                     int n_samples, int n_features, const RPLSHParams& params);
 
 } // namespace rplsh
 } // namespace culsh

@@ -28,15 +28,15 @@ __global__ void compute_signatures_kernel(const DType* X_hash, int n_samples, in
     size_t table_idx = (idx / n_projections) % n_hash_tables;
     size_t row_idx = idx / (n_projections * n_hash_tables);
 
-    // index of input hash
+    // Index of input hash
     size_t hash_idx =
         row_idx * (n_hash_tables * n_projections) + table_idx * n_projections + proj_idx;
 
-    // lay out signatures contiguously per table
+    // Lay out signatures contiguously per table
     size_t sig_idx = table_idx * (n_samples * n_projections) + row_idx * n_projections + proj_idx;
 
-    // convert to binary
-    // reinterpret as uint32, shift to sign bit, and invert (1 is pos, 0 is neg)
+    // Convert to binary
+    // Reinterpret as uint32, shift to sign bit, and invert (1 is pos, 0 is neg)
     X_sig[sig_idx] = (__float_as_uint(X_hash[hash_idx]) >> 31) ^ 1;
 }
 
@@ -81,9 +81,9 @@ void hash(cublasHandle_t cublas_handle, cudaStream_t stream, const DType* X, con
     const DType beta = DType(0.0);
     const int n_total_buckets = n_hash_tables * n_projections;
 
-    // given row-major X, P, compute X * P^T = X_hash.
-    // in col-major (used by cuBLAS - denoting with _c), we have X_c = X^T, P_c = P^T.
-    // thus to get X_hash in row-major, compute P_c^T * X_c = X_hash_c^T = X_hash.
+    // Given row-major X, P, compute X * P^T = X_hash.
+    // In col-major (used by cuBLAS - denoting with _c), we have X_c = X^T, P_c = P^T.
+    // Thus to get X_hash in row-major, compute P_c^T * X_c = X_hash_c^T = X_hash.
     if constexpr (std::is_same_v<DType, float>) {
         CUBLAS_CHECK(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, n_total_buckets,
                                  n_samples, n_features, &alpha, P, n_features, X, n_features, &beta,

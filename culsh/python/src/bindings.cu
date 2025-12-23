@@ -51,7 +51,7 @@ class RPLSHCore : public CUDAResourceManager {
         }
 
         float* Q_ptr = get_device_pointer<float>(Q_obj);
-        auto candidates = rplsh::query_indices(cublas_handle_, stream_, Q_ptr, n_queries, index);
+        auto candidates = rplsh::query(cublas_handle_, stream_, Q_ptr, n_queries, index);
 
         synchronize();
         return std::make_unique<rplsh::Candidates>(std::move(candidates));
@@ -64,7 +64,7 @@ class RPLSHCore : public CUDAResourceManager {
         }
 
         double* Q_ptr = get_device_pointer<double>(Q_obj);
-        auto candidates = rplsh::query_indices(cublas_handle_, stream_, Q_ptr, n_queries, index);
+        auto candidates = rplsh::query(cublas_handle_, stream_, Q_ptr, n_queries, index);
 
         synchronize();
         return std::make_unique<rplsh::Candidates>(std::move(candidates));
