@@ -97,35 +97,75 @@ class RPLSHCore : public CUDAResourceManager {
     uint64_t seed() const { return seed_; }
 };
 
-py::array_t<int> get_candidate_indices(const rplsh::Candidates& candidates) {
+py::object get_candidate_indices(const rplsh::Candidates& candidates, bool as_cupy = false) {
+    size_t n = candidates.n_total_candidates;
+
+    if (as_cupy) {
+        py::module_ cp = py::module_::import("cupy");
+        if (candidates.empty()) {
+            return cp.attr("empty")(0, py::arg("dtype") = "int32");
+        }
+        py::object arr = cp.attr("empty")(n, py::arg("dtype") = "int32");
+        int* dst_ptr = get_device_pointer<int>(arr);
+        CUDA_CHECK_THROW(cudaMemcpy(dst_ptr, candidates.query_candidate_indices,
+                                    n * sizeof(int), cudaMemcpyDeviceToDevice));
+        return arr;
+    }
+
     if (candidates.empty()) {
         return py::array_t<int>(0);
     }
-    py::array_t<int> result(static_cast<py::ssize_t>(candidates.n_total_candidates));
+    py::array_t<int> result(static_cast<py::ssize_t>(n));
     CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), candidates.query_candidate_indices,
-                                candidates.n_total_candidates * sizeof(int),
-                                cudaMemcpyDeviceToHost));
+                                n * sizeof(int), cudaMemcpyDeviceToHost));
     return result;
 }
 
-py::array_t<size_t> get_candidate_counts(const rplsh::Candidates& candidates) {
+py::object get_candidate_counts(const rplsh::Candidates& candidates, bool as_cupy = false) {
+    size_t n = candidates.n_queries;
+
+    if (as_cupy) {
+        py::module_ cp = py::module_::import("cupy");
+        if (candidates.empty()) {
+            return cp.attr("empty")(0, py::arg("dtype") = "uint64");
+        }
+        py::object arr = cp.attr("empty")(n, py::arg("dtype") = "uint64");
+        size_t* dst_ptr = get_device_pointer<size_t>(arr);
+        CUDA_CHECK_THROW(cudaMemcpy(dst_ptr, candidates.query_candidate_counts,
+                                    n * sizeof(size_t), cudaMemcpyDeviceToDevice));
+        return arr;
+    }
+
     if (candidates.empty()) {
         return py::array_t<size_t>(0);
     }
-    py::array_t<size_t> result(static_cast<py::ssize_t>(candidates.n_queries));
+    py::array_t<size_t> result(static_cast<py::ssize_t>(n));
     CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), candidates.query_candidate_counts,
-                                candidates.n_queries * sizeof(size_t), cudaMemcpyDeviceToHost));
+                                n * sizeof(size_t), cudaMemcpyDeviceToHost));
     return result;
 }
 
-py::array_t<size_t> get_candidate_offsets(const rplsh::Candidates& candidates) {
+py::object get_candidate_offsets(const rplsh::Candidates& candidates, bool as_cupy = false) {
+    size_t n = candidates.n_queries + 1;
+
+    if (as_cupy) {
+        py::module_ cp = py::module_::import("cupy");
+        if (candidates.empty()) {
+            return cp.attr("empty")(0, py::arg("dtype") = "uint64");
+        }
+        py::object arr = cp.attr("empty")(n, py::arg("dtype") = "uint64");
+        size_t* dst_ptr = get_device_pointer<size_t>(arr);
+        CUDA_CHECK_THROW(cudaMemcpy(dst_ptr, candidates.query_candidate_offsets,
+                                    n * sizeof(size_t), cudaMemcpyDeviceToDevice));
+        return arr;
+    }
+
     if (candidates.empty()) {
         return py::array_t<size_t>(0);
     }
-    py::array_t<size_t> result(static_cast<py::ssize_t>(candidates.n_queries + 1));
+    py::array_t<size_t> result(static_cast<py::ssize_t>(n));
     CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), candidates.query_candidate_offsets,
-                                (candidates.n_queries + 1) * sizeof(size_t),
-                                cudaMemcpyDeviceToHost));
+                                n * sizeof(size_t), cudaMemcpyDeviceToHost));
     return result;
 }
 
@@ -141,7 +181,7 @@ PYBIND11_MODULE(_culsh_core, m) {
 
     py::class_<Index, std::unique_ptr<Index>>(m, "Index")
         .def("empty", &Index::empty)
-        .def("device_size", &Index::device_size)
+        .def("size_bytes", &Index::size_bytes)
         .def_readonly("n_total_candidates", &Index::n_total_candidates)
         .def_readonly("n_total_buckets", &Index::n_total_buckets)
         .def_readonly("n_hash_tables", &Index::n_hash_tables)
@@ -152,9 +192,9 @@ PYBIND11_MODULE(_culsh_core, m) {
 
     py::class_<Candidates, std::unique_ptr<Candidates>>(m, "Candidates")
         .def("empty", &Candidates::empty)
-        .def("get_indices", &get_candidate_indices)
-        .def("get_counts", &get_candidate_counts)
-        .def("get_offsets", &get_candidate_offsets)
+        .def("get_indices", &get_candidate_indices, py::arg("as_cupy") = false)
+        .def("get_counts", &get_candidate_counts, py::arg("as_cupy") = false)
+        .def("get_offsets", &get_candidate_offsets, py::arg("as_cupy") = false)
         .def_readonly("n_queries", &Candidates::n_queries)
         .def_readonly("n_total_candidates", &Candidates::n_total_candidates);
 

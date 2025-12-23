@@ -43,7 +43,21 @@ def compute_recall(lsh_indices, gt_top_k_indices):
 
 
 def candidates_to_list(candidates):
-    """Convert Candidates object to list of arrays"""
+    """Convert Candidates object(s) to list of arrays.
+
+    Handles both single Candidates object and list of Candidates (from batched queries).
+    """
+    if isinstance(candidates, list):
+        # Batched results - concatenate all batches
+        result = []
+        for batch in candidates:
+            indices = batch.get_indices()
+            offsets = batch.get_offsets()
+            for i in range(batch.n_queries):
+                start, end = offsets[i], offsets[i + 1]
+                result.append(indices[start:end])
+        return result
+
     indices = candidates.get_indices()
     offsets = candidates.get_offsets()
     n_queries = candidates.n_queries
@@ -88,15 +102,51 @@ def evaluate_recall(Q, X, all_neighbors, n_eval_queries):
 
 def run_benchmark():
     parser = argparse.ArgumentParser(description="Benchmark cuLSH on SIFT dataset")
-    parser.add_argument("-d", "--data-dir", type=str, required=True)
+    parser.add_argument(
+        "-d",
+        "--data-dir",
+        type=str,
+        required=True,
+        help="Path to directory containing SIFT dataset",
+    )
     parser.add_argument("-nh", "--n-hash-tables", type=int, default=16)
-    parser.add_argument("-np", "--n-projections", type=int, default=4)
-    parser.add_argument("-s", "--seed", type=int, default=42)
-    parser.add_argument("-nq", "--n-queries", type=int, default=100)
-    parser.add_argument("-ne", "--n-eval-queries", type=int, default=10)
-    parser.add_argument("-r", "--results-dir", type=str, default=None)
+    parser.add_argument(
+        "-np", "--n-projections", type=int, default=4, help="Number of projections"
+    )
+    parser.add_argument("-s", "--seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "-nq", "--n-queries", type=int, default=100, help="Number of queries"
+    )
+    parser.add_argument(
+        "-ne",
+        "--n-eval-queries",
+        type=int,
+        default=10,
+        help="Number of evaluation queries",
+    )
+    parser.add_argument(
+        "-r",
+        "--results-dir",
+        type=str,
+        default=None,
+        help="Path to directory to write results",
+    )
+    parser.add_argument(
+        "-fq",
+        "--fit-query",
+        action="store_true",
+        help="Use combined fit_query (n_queries will be used for fit)",
+    )
+    parser.add_argument(
+        "-bs",
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Query batch size to reduce peak memory usage",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
+
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
@@ -109,12 +159,9 @@ def run_benchmark():
     X = read_fvecs(data_dir / "sift_base.fvecs")
     Q = read_fvecs(data_dir / "sift_query.fvecs")
 
-    logger.info(f"Data shape: {X.shape}")
-    logger.info(f"Query shape: {Q.shape}")
-    logger.info(f"Parameters: n_hash_tables={args.n_hash_tables}, n_projections={args.n_projections}, seed={args.seed}")
-
-    Q_test = Q[: args.n_queries]
-    logger.info(f"Using {len(Q_test)} test queries")
+    logger.info(
+        f"Parameters: n_hash_tables={args.n_hash_tables}, n_projections={args.n_projections}, seed={args.seed}"
+    )
 
     lsh = RPLSH(
         n_hash_tables=args.n_hash_tables,
@@ -122,26 +169,61 @@ def run_benchmark():
         seed=args.seed,
     )
 
-    logger.info("Running fit()...")
-    start_time = time.time()
-    model = lsh.fit(X)
-    fit_time = time.time() - start_time
-    logger.info(f"fit() completed in {fit_time:.2f}s")
+    if args.fit_query:
+        X_train = X[: args.n_queries]
+        Q_test = X_train
 
-    # Query
-    logger.info("Running query()...")
-    start_time = time.time()
-    candidates = model.query(Q_test)
-    query_time = time.time() - start_time
-    logger.info(f"query() completed in {query_time:.2f}s")
-    logger.info(f"Total candidates: {candidates.n_total_candidates} ({candidates.n_total_candidates * 4 / 1024**3:.2f} GB)")
+        # Fit+Query
+        logger.info(f"Running fit_query() on {len(X_train)} samples...")
+        start_time = time.time()
+        candidates = lsh.fit_query(X_train)
+        fit_query_time = time.time() - start_time
+        logger.info(f"fit_query() completed in {fit_query_time:.2f}s")
+
+        fit_time = fit_query_time
+        query_time = -1
+    else:
+        # Fit
+        X_train = X
+        logger.info(f"Running fit() on {len(X_train)} samples...")
+        start_time = time.time()
+        model = lsh.fit(X_train)
+        fit_time = time.time() - start_time
+        logger.info(f"fit() completed in {fit_time:.2f}s")
+
+        logger.debug(f"Index size: {model.index.size_bytes() / 1024**3:.2f} GB")
+
+        # Query
+        Q_test = Q[: args.n_queries]
+        batch_msg = f" (batch_size={args.batch_size})" if args.batch_size else ""
+        logger.info(f"Running query() on {len(Q_test)} queries{batch_msg}...")
+        start_time = time.time()
+        candidates = model.query(Q_test, batch_size=args.batch_size)
+        query_time = time.time() - start_time
+        logger.info(f"query() completed in {query_time:.2f}s")
+
+    # Handle batched results
+    if isinstance(candidates, list):
+        total_candidates = sum(c.n_total_candidates for c in candidates)
+        logger.info(
+            f"Total candidates: {total_candidates} ({total_candidates * 4 / 1024**3:.2f} GB) across {len(candidates)} batches"
+        )
+    else:
+        logger.info(
+            f"Total candidates: {candidates.n_total_candidates} ({candidates.n_total_candidates * 4 / 1024**3:.2f} GB)"
+        )
 
     # Evaluate recall
     all_neighbors = candidates_to_list(candidates)
     if len(all_neighbors) != len(Q_test):
+        n_candidates_queries = (
+            sum(c.n_queries for c in candidates)
+            if isinstance(candidates, list)
+            else candidates.n_queries
+        )
         logger.warning(
             "Candidates length does not match number of queries "
-            f"(candidates.n_queries={candidates.n_queries}, len(all_neighbors)={len(all_neighbors)}, "
+            f"(candidates.n_queries={n_candidates_queries}, len(all_neighbors)={len(all_neighbors)}, "
             f"len(Q_test)={len(Q_test)})."
         )
     n_eval = min(args.n_eval_queries, len(Q_test), len(all_neighbors))
@@ -149,7 +231,7 @@ def run_benchmark():
         logger.warning("No queries to evaluate (no candidates returned).")
         return
 
-    recall_results = evaluate_recall(Q_test, X, all_neighbors, n_eval)
+    recall_results = evaluate_recall(Q_test, X_train, all_neighbors, n_eval)
 
     # Save report
     if args.results_dir:
@@ -157,17 +239,20 @@ def run_benchmark():
         os.makedirs(args.results_dir, exist_ok=True)
 
         with open(report_path, "w") as f:
+            runtimes = (
+                {"fit_query_time": fit_time}
+                if args.fit_query
+                else {"fit_time": fit_time, "query_time": query_time}
+            )
             report_data = {
                 "params": {
                     "n_hash_tables": args.n_hash_tables,
                     "n_projections": args.n_projections,
                     "seed": args.seed,
                     "n_queries": args.n_queries,
+                    "mode": "fit_query" if args.fit_query else "fit+query",
                 },
-                "runtimes": {
-                    "fit_time": fit_time,
-                    "query_time": query_time,
-                },
+                "runtimes": runtimes,
                 "recall_evaluation": recall_results,
             }
             json.dump(report_data, f, indent=4)
@@ -176,9 +261,14 @@ def run_benchmark():
     else:
         logger.info("=" * 50)
         logger.info("Results:")
-        logger.info(f"  fit_time: {fit_time:.4f}s")
-        logger.info(f"  query_time: {query_time:.4f}s")
-        logger.info(f"  average recall ({recall_results['queries_with_candidates']}/{n_eval} queries with candidates): {recall_results['avg_recall']:.4f}")
+        if args.fit_query:
+            logger.info(f"  fit_query_time: {fit_time:.4f}s")
+        else:
+            logger.info(f"  fit_time: {fit_time:.4f}s")
+            logger.info(f"  query_time: {query_time:.4f}s")
+        logger.info(
+            f"  average recall ({recall_results['queries_with_candidates']}/{n_eval} queries with candidates): {recall_results['avg_recall']:.4f}"
+        )
         logger.info("=" * 50)
 
 

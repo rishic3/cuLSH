@@ -199,7 +199,9 @@ class RPLSHModel:
         """The fitted index."""
         return self._index
 
-    def query(self, Q: np.ndarray | cp.ndarray) -> Candidates:
+    def query(
+        self, Q: np.ndarray | cp.ndarray, batch_size: int | None = None
+    ) -> Candidates | list[Candidates]:
         """
         Find candidate neighbors for the query vectors Q.
 
@@ -207,11 +209,15 @@ class RPLSHModel:
         ----------
         Q : array-like of shape (n_queries, n_features)
             Query vectors. Can be numpy or cupy array.
+        batch_size : int, optional
+            If specified, process queries in batches of this size to reduce
+            peak memory usage. Returns a list of Candidates objects, one per batch.
 
         Returns
         -------
-        Candidates
+        Candidates or list[Candidates]
             Query results containing candidate indices for each query.
+            If batch_size is specified, returns a list of Candidates objects.
         """
         n_queries, n_features, dtype = get_array_info(Q)
         Q = ensure_device_array(Q)
@@ -221,9 +227,28 @@ class RPLSHModel:
                 f"Query features ({n_features}) != fitted features ({self._n_features})"
             )
 
-        if dtype == np.float32:
-            return self._core.query_float(Q, n_queries, self._index)
-        elif dtype == np.float64:
-            return self._core.query_double(Q, n_queries, self._index)
-        else:
-            raise TypeError(f"Unsupported dtype: {dtype}. Use float32 or float64.")
+        if batch_size is None or batch_size >= n_queries:
+            if dtype == np.float32:
+                return self._core.query_float(Q, n_queries, self._index)
+            elif dtype == np.float64:
+                return self._core.query_double(Q, n_queries, self._index)
+            else:
+                raise TypeError(f"Unsupported dtype: {dtype}. Use float32 or float64.")
+
+        # Batched queries
+        results = []
+        for start in range(0, n_queries, batch_size):
+            end = min(start + batch_size, n_queries)
+            Q_batch = Q[start:end]
+            batch_n_queries = end - start
+
+            if dtype == np.float32:
+                candidates = self._core.query_float(Q_batch, batch_n_queries, self._index)
+            elif dtype == np.float64:
+                candidates = self._core.query_double(Q_batch, batch_n_queries, self._index)
+            else:
+                raise TypeError(f"Unsupported dtype: {dtype}. Use float32 or float64.")
+
+            results.append(candidates)
+
+        return results
