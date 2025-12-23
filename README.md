@@ -22,6 +22,8 @@ make [debug|release]
 
 ## Usage
 
+### Fit and Query
+
 ```python
 import numpy as np
 from culsh import RPLSH
@@ -39,4 +41,12 @@ indices = candidates.get_indices()
 offsets = candidates.get_offsets()
 for i in range(len(Q)):
     query_candidates = indices[offsets[i]:offsets[i + 1]]
+```
+
+### All-Neighbors (Fit + Query)
+
+```python
+# Fit + Query
+lsh = RPLSH(n_hash_tables=16, n_projections=8)
+candidates = lsh.fit_query(X)
 ```
