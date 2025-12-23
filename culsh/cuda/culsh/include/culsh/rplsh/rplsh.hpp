@@ -70,33 +70,5 @@ Candidates query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, cons
 Candidates query_indices(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
                          int n_queries, const Index& index);
 
-/**
- * @brief Query the Random Projection LSH model for candidate neighbor vectors
- *
- * @param[in] cublas_handle cuBLAS handle
- * @param[in] stream CUDA stream
- * @param[in] Q Query vectors (row-major)
- * @param[in] n_queries Number of query points
- * @param[in] index RPLSH index (contains projection matrix)
- * @param[in] X_stored Fitted data vectors
- * @return Candidates containing candidate vectors for each query
- */
-Candidates query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q,
-                         int n_queries, const Index& index, const float* X_stored);
-
-/**
- * @brief Query the Random Projection LSH model for candidate neighbor vectors (double precision)
- *
- * @param[in] cublas_handle cuBLAS handle
- * @param[in] stream CUDA stream
- * @param[in] Q Query vectors (row-major)
- * @param[in] n_queries Number of query points
- * @param[in] index RPLSH index (contains projection matrix)
- * @param[in] X_stored Fitted data vectors
- * @return Candidates containing candidate vectors for each query
- */
-Candidates query_vectors(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
-                         int n_queries, const Index& index, const double* X_stored);
-
 } // namespace rplsh
 } // namespace culsh
