@@ -155,7 +155,7 @@ struct Index {
     /**
      * @brief Compute total device memory size of index
      */
-    size_t device_size() const {
+    size_t size_bytes() const {
         if (empty()) {
             return 0;
         }

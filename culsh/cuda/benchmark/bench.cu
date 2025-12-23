@@ -227,7 +227,7 @@ int main(int argc, char* argv[]) {
     auto fit_seconds = chrono::duration_cast<chrono::duration<double>>(fit_time).count();
     cout << "-> CUDA fit() completed in " << fit_seconds << "s" << endl << endl;
 
-    cout << "Index size: " << index.device_size() / (1024 * 1024) << " MB" << endl;
+    cout << "Index size: " << index.size_bytes() / (1024 * 1024) << " MB" << endl;
 
     // query
     cout << "Running CUDA query()..." << endl;
