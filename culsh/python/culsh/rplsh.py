@@ -116,6 +116,36 @@ class RPLSH:
             index=index,
         )
 
+    def fit_query(self, X: np.ndarray | cp.ndarray) -> Candidates:
+        """
+        Simultaneously fit and query the LSH index. This is more efficient than
+        calling fit() followed by query() when querying the same data used for fitting.
+        Note: input vectors are considered candidate neighbors of themselves.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input vectors to fit and query. Can be numpy or cupy array.
+
+        Returns
+        -------
+        Candidates
+            Query results containing candidate indices for each sample.
+        """
+        n_samples, n_features, dtype = get_array_info(X)
+        X = ensure_device_array(X)
+
+        core = RPLSHCore(self._n_hash_tables, self._n_projections, self._seed)
+
+        if dtype == np.float32:
+            return core.fit_query_float(X, n_samples, n_features)
+        elif dtype == np.float64:
+            return core.fit_query_double(X, n_samples, n_features)
+        else:
+            raise TypeError(
+                f"Unsupported dtype: {dtype}. Supported dtypes are float32, float64."
+            )
+
 
 class RPLSHModel:
     """

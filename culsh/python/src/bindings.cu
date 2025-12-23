@@ -70,6 +70,28 @@ class RPLSHCore : public CUDAResourceManager {
         return std::make_unique<rplsh::Candidates>(std::move(candidates));
     }
 
+    std::unique_ptr<rplsh::Candidates> fit_query_float(py::object X_obj, int n_samples,
+                                                       int n_features) {
+        float* X_ptr = get_device_pointer<float>(X_obj);
+
+        culsh::RPLSHParams params{n_hash_tables_, n_projections_, seed_};
+        auto candidates = rplsh::fit_query(cublas_handle_, stream_, X_ptr, n_samples, n_features, params);
+
+        synchronize();
+        return std::make_unique<rplsh::Candidates>(std::move(candidates));
+    }
+
+    std::unique_ptr<rplsh::Candidates> fit_query_double(py::object X_obj, int n_samples,
+                                                        int n_features) {
+        double* X_ptr = get_device_pointer<double>(X_obj);
+
+        culsh::RPLSHParams params{n_hash_tables_, n_projections_, seed_};
+        auto candidates = rplsh::fit_query(cublas_handle_, stream_, X_ptr, n_samples, n_features, params);
+
+        synchronize();
+        return std::make_unique<rplsh::Candidates>(std::move(candidates));
+    }
+
     int n_hash_tables() const { return n_hash_tables_; }
     int n_projections() const { return n_projections_; }
     uint64_t seed() const { return seed_; }
@@ -143,6 +165,8 @@ PYBIND11_MODULE(_culsh_core, m) {
         .def("fit_double", &RPLSHCore::fit_double)
         .def("query_float", &RPLSHCore::query_float)
         .def("query_double", &RPLSHCore::query_double)
+        .def("fit_query_float", &RPLSHCore::fit_query_float)
+        .def("fit_query_double", &RPLSHCore::fit_query_double)
         .def_property_readonly("n_hash_tables", &RPLSHCore::n_hash_tables)
         .def_property_readonly("n_projections", &RPLSHCore::n_projections)
         .def_property_readonly("seed", &RPLSHCore::seed);
