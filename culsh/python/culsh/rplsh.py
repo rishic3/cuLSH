@@ -2,7 +2,7 @@
 Random Projection LSH
 """
 
-from __future__ import annotations
+from typing import List, Optional, Union
 
 import cupy as cp
 import numpy as np
@@ -19,13 +19,14 @@ class RPLSH:
     Parameters
     ----------
     n_hash_tables : int
-        Number of hash tables. This parameter corresponds to an OR-amplification of
-        the locality-sensitive family. A higher value increases the probability of finding
-        a candidate neighbor. Corresponds to 'b' in the amplified probability (1 - (1 - p^r)^b).
+        Number of hash tables (OR-amplification of the locality-sensitive family).
+        More tables provide additional independent chances to find neighbors,
+        improving recall at the cost of more false positives. Corresponds to 'b'
+        in the amplified probability (1 - (1 - p^r)^b).
     n_projections : int
-        Number of random projections per hash table. This parameter corresponds to an
-        AND-amplification of the locality-sensitive family. A higher value decreases the
-        probability of finding a candidate neighbor. Corresponds to 'r' in the amplified
+        Number of projections per table (AND-amplification of the locality-sensitive family).
+        More projections require samples to agree on more hash bits, increasing precision
+        at the cost of more false negatives. Corresponds to 'r' in the amplified
         probability (1 - (1 - p^r)^b).
     seed : int, optional
         Random seed for reproducible projections. Default is 42.
@@ -80,7 +81,7 @@ class RPLSH:
         """Random seed."""
         return self._seed
 
-    def fit(self, X: np.ndarray | cp.ndarray) -> RPLSHModel:
+    def fit(self, X: Union[np.ndarray, cp.ndarray]) -> "RPLSHModel":
         """
         Fit the RPLSH model on input data.
 
@@ -116,7 +117,7 @@ class RPLSH:
             index=index,
         )
 
-    def fit_query(self, X: np.ndarray | cp.ndarray) -> Candidates:
+    def fit_query(self, X: Union[np.ndarray, cp.ndarray]) -> Candidates:
         """
         Simultaneously fit and query the LSH index. This is more efficient than
         calling fit() followed by query() when querying the same data used for fitting.
@@ -200,8 +201,8 @@ class RPLSHModel:
         return self._index
 
     def query(
-        self, Q: np.ndarray | cp.ndarray, batch_size: int | None = None
-    ) -> Candidates | list[Candidates]:
+        self, Q: Union[np.ndarray, cp.ndarray], batch_size: Optional[int] = None
+    ) -> Union[Candidates, List[Candidates]]:
         """
         Find candidate neighbors for the query vectors Q.
 
@@ -243,9 +244,13 @@ class RPLSHModel:
             batch_n_queries = end - start
 
             if dtype == np.float32:
-                candidates = self._core.query_float(Q_batch, batch_n_queries, self._index)
+                candidates = self._core.query_float(
+                    Q_batch, batch_n_queries, self._index
+                )
             elif dtype == np.float64:
-                candidates = self._core.query_double(Q_batch, batch_n_queries, self._index)
+                candidates = self._core.query_double(
+                    Q_batch, batch_n_queries, self._index
+                )
             else:
                 raise TypeError(f"Unsupported dtype: {dtype}. Use float32 or float64.")
 
