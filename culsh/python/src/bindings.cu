@@ -6,6 +6,9 @@
 #include <rplsh/candidates.cuh>
 #include <rplsh/index.cuh>
 
+#include <optional>
+#include <pybind11/stl.h>
+
 namespace py = pybind11;
 
 namespace culsh {
@@ -45,26 +48,32 @@ class RPLSHCore : public CUDAResourceManager {
     }
 
     std::unique_ptr<rplsh::Candidates> query_float(py::object Q_obj, int n_queries,
-                                                   const rplsh::Index& index) {
+                                                   const rplsh::Index& index,
+                                                   std::optional<int> batch_size = std::nullopt) {
         if (index.is_double) {
             throw std::runtime_error("Index was fitted with float64, but query is float32");
         }
 
         float* Q_ptr = get_device_pointer<float>(Q_obj);
-        auto candidates = rplsh::query(cublas_handle_, stream_, Q_ptr, n_queries, index);
+        auto candidates = batch_size.has_value()
+            ? rplsh::query_batched(cublas_handle_, stream_, Q_ptr, n_queries, index, batch_size.value())
+            : rplsh::query(cublas_handle_, stream_, Q_ptr, n_queries, index);
 
         synchronize();
         return std::make_unique<rplsh::Candidates>(std::move(candidates));
     }
 
     std::unique_ptr<rplsh::Candidates> query_double(py::object Q_obj, int n_queries,
-                                                    const rplsh::Index& index) {
+                                                    const rplsh::Index& index,
+                                                    std::optional<int> batch_size = std::nullopt) {
         if (!index.is_double) {
             throw std::runtime_error("Index was fitted with float32, but query is float64");
         }
 
         double* Q_ptr = get_device_pointer<double>(Q_obj);
-        auto candidates = rplsh::query(cublas_handle_, stream_, Q_ptr, n_queries, index);
+        auto candidates = batch_size.has_value()
+            ? rplsh::query_batched(cublas_handle_, stream_, Q_ptr, n_queries, index, batch_size.value())
+            : rplsh::query(cublas_handle_, stream_, Q_ptr, n_queries, index);
 
         synchronize();
         return std::make_unique<rplsh::Candidates>(std::move(candidates));
@@ -203,8 +212,10 @@ PYBIND11_MODULE(_culsh_core, m) {
              py::arg("n_hash_tables"), py::arg("n_projections"), py::arg("seed") = 42)
         .def("fit_float", &RPLSHCore::fit_float)
         .def("fit_double", &RPLSHCore::fit_double)
-        .def("query_float", &RPLSHCore::query_float)
-        .def("query_double", &RPLSHCore::query_double)
+        .def("query_float", &RPLSHCore::query_float,
+             py::arg("Q"), py::arg("n_queries"), py::arg("index"), py::arg("batch_size") = py::none())
+        .def("query_double", &RPLSHCore::query_double,
+             py::arg("Q"), py::arg("n_queries"), py::arg("index"), py::arg("batch_size") = py::none())
         .def("fit_query_float", &RPLSHCore::fit_query_float)
         .def("fit_query_double", &RPLSHCore::fit_query_double)
         .def_property_readonly("n_hash_tables", &RPLSHCore::n_hash_tables)

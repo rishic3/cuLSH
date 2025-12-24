@@ -168,8 +168,8 @@ __global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* so
     // Optionally store mapping from (row,table) -> bucket_id for this item
     // This directly materializes the equivalent of matched_bucket_indices for fit_query
     if (d_item_to_bucket != nullptr) {
-        // Since d_bucket_scan is exclusive, bucket_id = d_bucket_flags[idx] - 1 for items that continue a bucket
-        // (for items that start a bucket, bucket_id = d_bucket_scan[idx])
+        // Since d_bucket_scan is exclusive, bucket_id = d_bucket_flags[idx] - 1 for items that
+        // continue a bucket (for items that start a bucket, bucket_id = d_bucket_scan[idx])
         int bucket_id = d_bucket_scan[idx] + d_bucket_flags[idx] - 1;
         d_item_to_bucket[orig_row_id * n_hash_tables + table_id] = bucket_id;
     }

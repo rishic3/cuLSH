@@ -229,5 +229,45 @@ Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const do
     return candidates;
 }
 
+Candidates query_batched(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q,
+                         int n_queries, const Index& index, int batch_size) {
+    if (batch_size <= 0 || batch_size >= n_queries) {
+        return query(cublas_handle, stream, Q, n_queries, index);
+    }
+
+    Candidates result;
+    for (int start = 0; start < n_queries; start += batch_size) {
+        int end = std::min(start + batch_size, n_queries);
+        int batch_n = end - start;
+
+        // Query this batch and merge into result
+        const float* Q_batch = Q + static_cast<size_t>(start) * index.n_features;
+        Candidates batch_candidates = query(cublas_handle, stream, Q_batch, batch_n, index);
+        result.merge(stream, std::move(batch_candidates));
+    }
+
+    return result;
+}
+
+Candidates query_batched(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
+                         int n_queries, const Index& index, int batch_size) {
+    if (batch_size <= 0 || batch_size >= n_queries) {
+        return query(cublas_handle, stream, Q, n_queries, index);
+    }
+
+    Candidates result;
+    for (int start = 0; start < n_queries; start += batch_size) {
+        int end = std::min(start + batch_size, n_queries);
+        int batch_n = end - start;
+
+        // Query this batch and merge into result
+        const double* Q_batch = Q + static_cast<size_t>(start) * index.n_features;
+        Candidates batch_candidates = query(cublas_handle, stream, Q_batch, batch_n, index);
+        result.merge(stream, std::move(batch_candidates));
+    }
+
+    return result;
+}
+
 } // namespace rplsh
 } // namespace culsh

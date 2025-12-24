@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cuda_runtime.h>
+#include <thrust/execution_policy.h>
+#include <thrust/transform.h>
 
 namespace culsh {
 namespace rplsh {
@@ -123,7 +125,74 @@ struct Candidates {
         n_queries = 0;
         n_total_candidates = 0;
     }
+
+    /**
+     * @brief Merge another Candidates object into this one
+     *
+     * @param[in] stream CUDA stream
+     * @param[in] other Candidates to merge (will be freed)
+     */
+    void merge(cudaStream_t stream, Candidates&& other);
 };
+
+inline void Candidates::merge(cudaStream_t stream, Candidates&& other) {
+    if (other.empty()) {
+        return;
+    }
+
+    if (empty()) {
+        // Move other into this
+        *this = std::move(other);
+        return;
+    }
+
+    // Compute new sizes
+    int new_n_queries = n_queries + other.n_queries;
+    size_t new_n_total = n_total_candidates + other.n_total_candidates;
+
+    // Allocate new arrays
+    int* new_indices = nullptr;
+    size_t* new_counts = nullptr;
+    size_t* new_offsets = nullptr;
+    cudaMalloc(&new_indices, new_n_total * sizeof(int));
+    cudaMalloc(&new_counts, new_n_queries * sizeof(size_t));
+    cudaMalloc(&new_offsets, (new_n_queries + 1) * sizeof(size_t));
+
+    // Copy indices
+    cudaMemcpyAsync(new_indices, query_candidate_indices, n_total_candidates * sizeof(int),
+                    cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(new_indices + n_total_candidates, other.query_candidate_indices,
+                    other.n_total_candidates * sizeof(int), cudaMemcpyDeviceToDevice, stream);
+
+    // Copy counts
+    cudaMemcpyAsync(new_counts, query_candidate_counts, n_queries * sizeof(size_t),
+                    cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(new_counts + n_queries, other.query_candidate_counts,
+                    other.n_queries * sizeof(size_t), cudaMemcpyDeviceToDevice, stream);
+
+    // Copy this's offsets
+    cudaMemcpyAsync(new_offsets, query_candidate_offsets, (n_queries + 1) * sizeof(size_t),
+                    cudaMemcpyDeviceToDevice, stream);
+
+    // Copy other's offsets and add base offset (n_total_candidates)
+    // Ignore first offset since it is always 0
+    thrust::transform(thrust::cuda::par.on(stream), other.query_candidate_offsets + 1,
+                      other.query_candidate_offsets + other.n_queries + 1,
+                      new_offsets + n_queries + 1, thrust::placeholders::_1 + n_total_candidates);
+
+    cudaStreamSynchronize(stream);
+
+    // Cleanup old objects
+    free();
+    other.free();
+
+    // Update this object
+    query_candidate_indices = new_indices;
+    query_candidate_counts = new_counts;
+    query_candidate_offsets = new_offsets;
+    n_queries = new_n_queries;
+    n_total_candidates = new_n_total;
+}
 
 } // namespace rplsh
 } // namespace culsh

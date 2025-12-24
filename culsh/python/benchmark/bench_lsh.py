@@ -43,21 +43,7 @@ def compute_recall(lsh_indices, gt_top_k_indices):
 
 
 def candidates_to_list(candidates):
-    """Convert Candidates object(s) to list of arrays.
-
-    Handles both single Candidates object and list of Candidates (from batched queries).
-    """
-    if isinstance(candidates, list):
-        # Batched results - concatenate all batches
-        result = []
-        for batch in candidates:
-            indices = batch.get_indices()
-            offsets = batch.get_offsets()
-            for i in range(batch.n_queries):
-                start, end = offsets[i], offsets[i + 1]
-                result.append(indices[start:end])
-        return result
-
+    """Convert Candidates object to list of arrays (one per query)."""
     indices = candidates.get_indices()
     offsets = candidates.get_offsets()
     n_queries = candidates.n_queries
@@ -174,9 +160,10 @@ def run_benchmark():
         Q_test = X_train
 
         # Fit+Query
-        logger.info(f"Running fit_query() on {len(X_train)} samples...")
+        batch_msg = f" (batch_size={args.batch_size})" if args.batch_size else ""
+        logger.info(f"Running fit_query() on {len(X_train)} samples{batch_msg}...")
         start_time = time.time()
-        candidates = lsh.fit_query(X_train)
+        candidates = lsh.fit_query(X_train, batch_size=args.batch_size)
         fit_query_time = time.time() - start_time
         logger.info(f"fit_query() completed in {fit_query_time:.2f}s")
 
@@ -202,28 +189,16 @@ def run_benchmark():
         query_time = time.time() - start_time
         logger.info(f"query() completed in {query_time:.2f}s")
 
-    # Handle batched results
-    if isinstance(candidates, list):
-        total_candidates = sum(c.n_total_candidates for c in candidates)
-        logger.info(
-            f"Total candidates: {total_candidates} ({total_candidates * 4 / 1024**3:.2f} GB) across {len(candidates)} batches"
-        )
-    else:
-        logger.info(
-            f"Total candidates: {candidates.n_total_candidates} ({candidates.n_total_candidates * 4 / 1024**3:.2f} GB)"
-        )
+    logger.info(
+        f"Total candidates: {candidates.n_total_candidates} ({candidates.n_total_candidates * 4 / 1024**3:.2f} GB)"
+    )
 
     # Evaluate recall
     all_neighbors = candidates_to_list(candidates)
     if len(all_neighbors) != len(Q_test):
-        n_candidates_queries = (
-            sum(c.n_queries for c in candidates)
-            if isinstance(candidates, list)
-            else candidates.n_queries
-        )
         logger.warning(
             "Candidates length does not match number of queries "
-            f"(candidates.n_queries={n_candidates_queries}, len(all_neighbors)={len(all_neighbors)}, "
+            f"(candidates.n_queries={candidates.n_queries}, len(all_neighbors)={len(all_neighbors)}, "
             f"len(Q_test)={len(Q_test)})."
         )
     n_eval = min(args.n_eval_queries, len(Q_test), len(all_neighbors))

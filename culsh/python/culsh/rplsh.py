@@ -2,7 +2,7 @@
 Random Projection LSH
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import cupy as cp
 import numpy as np
@@ -117,7 +117,9 @@ class RPLSH:
             index=index,
         )
 
-    def fit_query(self, X: Union[np.ndarray, cp.ndarray]) -> Candidates:
+    def fit_query(
+        self, X: Union[np.ndarray, cp.ndarray], batch_size: Optional[int] = None
+    ) -> Candidates:
         """
         Simultaneously fit and query the LSH index. This is more efficient than
         calling fit() followed by query() when querying the same data used for fitting.
@@ -127,12 +129,19 @@ class RPLSH:
         ----------
         X : array-like of shape (n_samples, n_features)
             Input vectors to fit and query. Can be numpy or cupy array.
+        batch_size : int, optional
+            If specified, falls back to fit() + query() with batching to reduce
+            peak memory usage.
 
         Returns
         -------
         Candidates
             Query results containing candidate indices for each sample.
         """
+        if batch_size is not None:
+            model = self.fit(X)
+            return model.query(X, batch_size=batch_size)
+
         n_samples, n_features, dtype = get_array_info(X)
         X = ensure_device_array(X)
 
@@ -202,7 +211,7 @@ class RPLSHModel:
 
     def query(
         self, Q: Union[np.ndarray, cp.ndarray], batch_size: Optional[int] = None
-    ) -> Union[Candidates, List[Candidates]]:
+    ) -> Candidates:
         """
         Find candidate neighbors for the query vectors Q.
 
@@ -212,13 +221,12 @@ class RPLSHModel:
             Query vectors. Can be numpy or cupy array.
         batch_size : int, optional
             If specified, process queries in batches of this size to reduce
-            peak memory usage. Returns a list of Candidates objects, one per batch.
+            peak memory usage.
 
         Returns
         -------
-        Candidates or list[Candidates]
+        Candidates
             Query results containing candidate indices for each query.
-            If batch_size is specified, returns a list of Candidates objects.
         """
         n_queries, n_features, dtype = get_array_info(Q)
         Q = ensure_device_array(Q)
@@ -228,32 +236,9 @@ class RPLSHModel:
                 f"Query features ({n_features}) != fitted features ({self._n_features})"
             )
 
-        if batch_size is None or batch_size >= n_queries:
-            if dtype == np.float32:
-                return self._core.query_float(Q, n_queries, self._index)
-            elif dtype == np.float64:
-                return self._core.query_double(Q, n_queries, self._index)
-            else:
-                raise TypeError(f"Unsupported dtype: {dtype}. Use float32 or float64.")
-
-        # Batched queries
-        results = []
-        for start in range(0, n_queries, batch_size):
-            end = min(start + batch_size, n_queries)
-            Q_batch = Q[start:end]
-            batch_n_queries = end - start
-
-            if dtype == np.float32:
-                candidates = self._core.query_float(
-                    Q_batch, batch_n_queries, self._index
-                )
-            elif dtype == np.float64:
-                candidates = self._core.query_double(
-                    Q_batch, batch_n_queries, self._index
-                )
-            else:
-                raise TypeError(f"Unsupported dtype: {dtype}. Use float32 or float64.")
-
-            results.append(candidates)
-
-        return results
+        if dtype == np.float32:
+            return self._core.query_float(Q, n_queries, self._index, batch_size)
+        elif dtype == np.float64:
+            return self._core.query_double(Q, n_queries, self._index, batch_size)
+        else:
+            raise TypeError(f"Unsupported dtype: {dtype}. Use float32 or float64.")

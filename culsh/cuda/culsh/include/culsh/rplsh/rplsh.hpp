@@ -98,5 +98,33 @@ Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const fl
 Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X,
                      int n_samples, int n_features, const RPLSHParams& params);
 
+/**
+ * @brief Query the RPLSH index in batches
+ *
+ * @param[in] cublas_handle cuBLAS handle
+ * @param[in] stream CUDA stream
+ * @param[in] Q Query vectors (row-major)
+ * @param[in] n_queries Number of query points
+ * @param[in] index RPLSH index (contains projection matrix)
+ * @param[in] batch_size Number of queries per batch
+ * @return Candidates containing candidate indices for each query
+ */
+Candidates query_batched(cublasHandle_t cublas_handle, cudaStream_t stream, const float* Q,
+                         int n_queries, const Index& index, int batch_size);
+
+/**
+ * @brief Query the RPLSH index in batches (double precision)
+ *
+ * @param[in] cublas_handle cuBLAS handle
+ * @param[in] stream CUDA stream
+ * @param[in] Q Query vectors (row-major)
+ * @param[in] n_queries Number of query points
+ * @param[in] index RPLSH index (contains projection matrix)
+ * @param[in] batch_size Number of queries per batch
+ * @return Candidates containing candidate indices for each query
+ */
+Candidates query_batched(cublasHandle_t cublas_handle, cudaStream_t stream, const double* Q,
+                         int n_queries, const Index& index, int batch_size);
+
 } // namespace rplsh
 } // namespace culsh

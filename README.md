@@ -79,3 +79,12 @@ candidates = RPLSH(n_hash_tables=16, n_projections=8, seed=42).fit_query(X)
 indices = candidates.get_indices()
 offsets = candidates.get_offsets()
 ```
+
+### Batched Queries
+
+For large query sets, use `batch_size` to reduce peak GPU memory:
+
+```python
+# Process 100 queries at a time, returns single merged Candidates
+candidates = model.query(Q, batch_size=100)
+```
