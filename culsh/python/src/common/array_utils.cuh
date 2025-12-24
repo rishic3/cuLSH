@@ -18,6 +18,7 @@ T* get_device_pointer(py::object obj) {
     }
 
     py::dict interface = obj.attr("__cuda_array_interface__").cast<py::dict>();
+    // returns (int, bool) of (data pointer, read-only)
     py::tuple data = interface["data"].cast<py::tuple>();
     uintptr_t ptr = data[0].cast<uintptr_t>();
 

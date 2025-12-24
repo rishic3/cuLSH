@@ -488,7 +488,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     // and find the bucket that matches the query signature (if it exists).
     // For each such matching bucket, all candidates in the index are considered neighbors
     // of the query. Finally since the candidates across buckets are not disjoint, we
-    // post-process to deduplicate each query's collected array of candidates.
+    // post-process to deduplicate each query's collected segment of candidates.
 
     // Allocate array to store query matches
     int* d_matched_bucket_indices = nullptr;
