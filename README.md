@@ -40,8 +40,9 @@ model = RPLSH(n_hash_tables=16, n_projections=8, seed=42).fit(X)
 candidates = model.query(Q)
 
 # Get neighbors
-indices = candidates.get_indices()  # [15, 16, 40, 45, ...]
-offsets = candidates.get_offsets()  # [0, 7, 14, 19, ...]
+indices = candidates.get_indices()  # [15, 73, 14, 29, 35, ...]
+offsets = candidates.get_offsets()  # [0, 2, 9, 14, 21, ...]
+counts = candidates.get_counts()  # [2, 7, 5, 7, 8, ...]
 ```
 
 ### Fit and Query (CuPy)
@@ -62,6 +63,7 @@ candidates = model.query(Q)
 # Get neighbors
 indices = candidates.get_indices(as_cupy=True)
 offsets = candidates.get_offsets(as_cupy=True)
+counts = candidates.get_counts(as_cupy=True)
 ```
 
 ### Simultaneous Fit + Query
@@ -78,6 +80,7 @@ candidates = RPLSH(n_hash_tables=16, n_projections=8, seed=42).fit_query(X)
 # Get neighbors
 indices = candidates.get_indices()
 offsets = candidates.get_offsets()
+counts = candidates.get_counts()
 ```
 
 ### Batched Queries
