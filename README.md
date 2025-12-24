@@ -7,14 +7,14 @@ Locality Sensitive Hashing on GPUs with Python bindings.
 ### Installation
 
 ```bash
-cd culsh/python
+cd python
 pip install .
 ```
 
 ### Development
 
 ```bash
-cd culsh/python
+cd python
 pip install -e .
 
 # If making C++ changes, rebuild .so
