@@ -2,7 +2,7 @@
 
 #include "../candidates.cuh"
 #include "../index.cuh"
-#include "../utils/utils.cuh"
+#include "../utils.cuh"
 #include <cstdint>
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_scan.cuh>
@@ -23,11 +23,11 @@ namespace detail {
  * @param[in] table_start Start index of the table's buckets in all_bucket_signatures
  * @param[in] table_end End index of the table's buckets in all_bucket_signatures
  * @param[in] query_sig Device pointer to query signature
- * @param[in] n_projections Number of projections (width of signature)
+ * @param[in] n_hashes Number of hashes (width of signature)
  * @return Matching bucket index or -1 if no match found
  */
 __device__ int find_bucket_in_table(const int8_t* all_bucket_signatures, int table_start,
-                                    int table_end, const int8_t* query_sig, int n_projections) {
+                                    int table_end, const int8_t* query_sig, int n_hashes) {
 
     if (table_start >= table_end)
         return -1;
@@ -37,11 +37,11 @@ __device__ int find_bucket_in_table(const int8_t* all_bucket_signatures, int tab
     int hi = table_end - 1;
     while (lo <= hi) {
         int mid = lo + (hi - lo) / 2;
-        const int8_t* mid_sig = all_bucket_signatures + static_cast<size_t>(mid) * n_projections;
+        const int8_t* mid_sig = all_bucket_signatures + static_cast<size_t>(mid) * n_hashes;
 
         // Check if signature matches
         int cmp = 0;
-        for (int i = 0; i < n_projections && cmp == 0; ++i) {
+        for (int i = 0; i < n_hashes && cmp == 0; ++i) {
             cmp = (query_sig[i] > mid_sig[i]) - (query_sig[i] < mid_sig[i]);
         }
 
@@ -64,14 +64,14 @@ __device__ int find_bucket_in_table(const int8_t* all_bucket_signatures, int tab
  * all_bucket_signatures
  * @param[in] n_queries Number of queries
  * @param[in] n_hash_tables Number of hash tables
- * @param[in] n_projections Number of projections (width of signature)
+ * @param[in] n_hashes Number of hashes (width of signature)
  * @param[out] matched_bucket_indices Device pointer to array of matching bucket indices for each
  * (query, table) pair
  */
 __global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
                                              const int8_t* all_bucket_signatures,
                                              const int* table_bucket_offsets, int n_queries,
-                                             int n_hash_tables, int n_projections,
+                                             int n_hash_tables, int n_hashes,
                                              int* matched_bucket_indices) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
@@ -82,16 +82,16 @@ __global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
     int table_idx = idx % n_hash_tables;
 
     // Get pointer to query signature in Q_sig
-    const int8_t* query_sig = Q_sig + static_cast<size_t>(table_idx) * (n_queries * n_projections) +
-                              static_cast<size_t>(query_idx) * n_projections;
+    const int8_t* query_sig = Q_sig + static_cast<size_t>(table_idx) * (n_queries * n_hashes) +
+                              static_cast<size_t>(query_idx) * n_hashes;
 
     // Get start and end of table's buckets in all_bucket_signatures
     int table_start = table_bucket_offsets[table_idx];
     int table_end = table_bucket_offsets[table_idx + 1];
 
     // Look for matching bucket
-    int matched_bucket = find_bucket_in_table(all_bucket_signatures, table_start, table_end,
-                                              query_sig, n_projections);
+    int matched_bucket =
+        find_bucket_in_table(all_bucket_signatures, table_start, table_end, query_sig, n_hashes);
 
     matched_bucket_indices[idx] = matched_bucket;
 }
@@ -471,20 +471,20 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
  * @brief Query LSH index to find candidates
  * @param[in] stream CUDA stream
  * @param[in] Q_sig Device pointer to query signature matrix (n_queries x n_hash_tables *
- * n_projections)
+ * n_hashes)
  * @param[in] n_queries Number of input rows
  * @param[in] n_hash_tables Number of hash tables
- * @param[in] n_projections Number of projections
+ * @param[in] n_hashes Number of hashes per table
  * @param[in] index Device index
  * @return Candidates object
  */
 Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, int n_hash_tables,
-                       int n_projections, const Index* index) {
+                       int n_hashes, const Index* index) {
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
     dim3 block_size(256);
     dim3 grid_size_items((n_items + block_size.x - 1) / block_size.x);
 
-    // For each query, we look at each hash table (aka, column of width n_projections)
+    // For each query, we look at each hash table (aka, column of width n_hashes)
     // and find the bucket that matches the query signature (if it exists).
     // For each such matching bucket, all candidates in the index are considered neighbors
     // of the query. Finally since the candidates across buckets are not disjoint, we
@@ -497,7 +497,7 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     // Find matching buckets for each (query, table)
     find_matching_buckets_kernel<<<grid_size_items, block_size, 0, stream>>>(
         Q_sig, index->all_bucket_signatures, index->table_bucket_offsets, n_queries, n_hash_tables,
-        n_projections, d_matched_bucket_indices);
+        n_hashes, d_matched_bucket_indices);
 
     Candidates candidates = query_from_matched_buckets(stream, d_matched_bucket_indices, n_queries,
                                                        n_hash_tables, index);

@@ -1,8 +1,8 @@
-#include "rplsh/index.cuh"
-#include "rplsh/kernels/fit.cuh"
+#include "core/index.cuh"
+#include "core/kernels/fit.cuh"
+#include "core/kernels/query.cuh"
 #include "rplsh/kernels/hash.cuh"
 #include "rplsh/kernels/projections.cuh"
-#include "rplsh/kernels/query.cuh"
 
 #include <chrono>
 #include <cuda_runtime.h>
@@ -11,7 +11,7 @@
 
 struct Params {
     int n_hash_tables;
-    int n_projections;
+    int n_hashes;
     int seed;
 };
 
@@ -32,25 +32,25 @@ culsh::rplsh::Index main_fit(cublasHandle_t cublas_handle, cudaStream_t stream, 
     // allocate X_hash
     float* X_hash;
     CUDA_CHECK(cudaMalloc(&X_hash, static_cast<size_t>(n_samples) * params.n_hash_tables *
-                                       params.n_projections * sizeof(float)));
+                                       params.n_hashes * sizeof(float)));
 
     // generate random projections and hash X
     culsh::rplsh::detail::generate_random_projections<float>(
-        stream, params.n_hash_tables * params.n_projections, n_features, params.seed, P);
+        stream, params.n_hash_tables * params.n_hashes, n_features, params.seed, P);
     culsh::rplsh::detail::hash<float>(cublas_handle, stream, X, P, n_samples, n_features,
-                                      params.n_hash_tables, params.n_projections, X_hash);
+                                      params.n_hash_tables, params.n_hashes, X_hash);
 
     // compute binary signatures from X_hash
     int8_t* X_sig;
     CUDA_CHECK(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
-                                      params.n_projections * sizeof(int8_t)));
+                                      params.n_hashes * sizeof(int8_t)));
     culsh::rplsh::detail::compute_signatures<float>(stream, X_hash, n_samples, params.n_hash_tables,
-                                                    params.n_projections, X_sig);
+                                                    params.n_hashes, X_sig);
     CUDA_CHECK(cudaFree(X_hash)); // done with X_hash
 
     // build and return index
     auto index = culsh::rplsh::detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables,
-                                                 params.n_projections);
+                                                 params.n_hashes);
     CUDA_CHECK(cudaFree(X_sig));
 
     return index;
@@ -60,8 +60,8 @@ void test() {
     const int n = 1000;
     const int d = 128;
     const int n_hash_tables = 64;
-    const int n_projections = 8;
-    const int n_total_buckets = n_hash_tables * n_projections;
+    const int n_hashes = 8;
+    const int n_total_buckets = n_hash_tables * n_hashes;
 
     // create stream
     cudaStream_t stream;
@@ -80,7 +80,7 @@ void test() {
 
     generate_x(X, n, d, 12345);
 
-    auto params = Params{n_hash_tables, n_projections, 12345};
+    auto params = Params{n_hash_tables, n_hashes, 12345};
 
     auto start_fit = std::chrono::high_resolution_clock::now();
     // Fit the LSH model and get the index
@@ -88,8 +88,8 @@ void test() {
     auto end_fit = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> fit_time = end_fit - start_fit;
 
-    std::cout << "Built index with " << index.n_hash_tables << " hash tables and "
-              << index.n_projections << " projections per table" << std::endl;
+    std::cout << "Built index with " << index.n_hash_tables << " hash tables and " << index.n_hashes
+              << " hashes per table" << std::endl;
     std::cout << "  Fit took [" << fit_time.count() << "s]" << std::endl;
 
     CUDA_CHECK(cudaFree(X));
@@ -104,8 +104,8 @@ void test() {
 
     auto start_query = std::chrono::high_resolution_clock::now();
 
-    culsh::rplsh::detail::hash<float>(cublas_handle, stream, Q, P, n, d, n_hash_tables,
-                                      n_projections, Q_hash);
+    culsh::rplsh::detail::hash<float>(cublas_handle, stream, Q, P, n, d, n_hash_tables, n_hashes,
+                                      Q_hash);
 
     CUDA_CHECK(cudaFree(P));
 
@@ -113,13 +113,13 @@ void test() {
     CUDA_CHECK(cudaMalloc(&Q_sig, static_cast<size_t>(n) * n_total_buckets * sizeof(int8_t)));
 
     // convert hash values to signatures
-    culsh::rplsh::detail::compute_signatures<float>(stream, Q_hash, n, n_hash_tables, n_projections,
+    culsh::rplsh::detail::compute_signatures<float>(stream, Q_hash, n, n_hash_tables, n_hashes,
                                                     Q_sig);
 
     CUDA_CHECK(cudaFree(Q_hash));
 
     culsh::rplsh::Candidates candidates =
-        culsh::rplsh::detail::query_index(stream, Q_sig, n, n_hash_tables, n_projections, &index);
+        culsh::rplsh::detail::query_index(stream, Q_sig, n, n_hash_tables, n_hashes, &index);
 
     auto end_query = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> query_time = end_query - start_query;
@@ -136,8 +136,8 @@ void test_breakdown() {
     const int n = 1000000;
     const int d = 128;
     const int n_hash_tables = 64;
-    const int n_projections = 8;
-    const int n_total_buckets = n_hash_tables * n_projections;
+    const int n_hashes = 8;
+    const int n_total_buckets = n_hash_tables * n_hashes;
 
     float* X;
     float* P;
@@ -171,8 +171,8 @@ void test_breakdown() {
 
     auto start_hash = std::chrono::high_resolution_clock::now();
     // hash
-    culsh::rplsh::detail::hash<float>(cublas_handle, stream, X, P, n, d, n_hash_tables,
-                                      n_projections, X_hash);
+    culsh::rplsh::detail::hash<float>(cublas_handle, stream, X, P, n, d, n_hash_tables, n_hashes,
+                                      X_hash);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end_hash = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> hash_time = end_hash - start_hash;
@@ -189,7 +189,7 @@ void test_breakdown() {
 
     auto start_compute_signatures = std::chrono::high_resolution_clock::now();
     // convert hash values to signatures
-    culsh::rplsh::detail::compute_signatures<float>(stream, X_hash, n, n_hash_tables, n_projections,
+    culsh::rplsh::detail::compute_signatures<float>(stream, X_hash, n, n_hash_tables, n_hashes,
                                                     X_signatures);
     // CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end_compute_signatures = std::chrono::high_resolution_clock::now();
@@ -201,7 +201,7 @@ void test_breakdown() {
     auto start_build_index = std::chrono::high_resolution_clock::now();
     // build index
     culsh::rplsh::Index index =
-        culsh::rplsh::detail::fit_index(stream, X_signatures, n, n_hash_tables, n_projections);
+        culsh::rplsh::detail::fit_index(stream, X_signatures, n, n_hash_tables, n_hashes);
     // CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end_build_index = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> build_index_time = end_build_index - start_build_index;
@@ -213,7 +213,7 @@ void test_breakdown() {
     std::cout << "Index metadata: " << std::endl;
     std::cout << "  n_total_buckets: " << index.n_total_buckets << std::endl;
     std::cout << "  n_hash_tables: " << index.n_hash_tables << std::endl;
-    std::cout << "  n_projections: " << index.n_projections << std::endl;
+    std::cout << "  n_hashes: " << index.n_hashes << std::endl;
 
     CUDA_CHECK(cudaGetLastError());
 

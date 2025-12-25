@@ -22,14 +22,16 @@ class RPLSH:
         Number of hash tables (OR-amplification of the locality-sensitive family).
         More tables provide additional independent chances to find neighbors,
         improving recall at the cost of more false positives. Corresponds to 'b'
-        in the amplified probability (1 - (1 - p^r)^b).
-    n_projections : int
-        Number of projections per table (AND-amplification of the locality-sensitive family).
-        More projections require samples to agree on more hash bits, increasing precision
-        at the cost of more false negatives. Corresponds to 'r' in the amplified
-        probability (1 - (1 - p^r)^b).
+        in the amplified probability (1-(1-p^r)^b). The approximate similarity
+        threshold to qualify as a candidate neighbor is (1/b)^(1/r).
+    n_hashes : int
+        Number of hashes (random projections) per table (AND-amplification of the
+        locality-sensitive family). More hashes require samples to agree on more hash bits,
+        increasing precision at the cost of more false negatives. Corresponds to 'r' in the
+        amplified probability (1-(1-p^r)^b). The approximate similarity threshold to qualify
+        as a candidate neighbor is (1/b)^(1/r).
     seed : int, optional
-        Random seed for reproducible projections. Default is 42.
+        Random seed for reproducible hashes. Default is 42.
 
     Examples
     --------
@@ -41,7 +43,7 @@ class RPLSH:
     >>> Q = np.random.randn(100, 128).astype(np.float32)
     >>>
     >>> # Fit model
-    >>> lsh = RPLSH(n_hash_tables=16, n_projections=8)
+    >>> lsh = RPLSH(n_hash_tables=16, n_hashes=8)
     >>> model = lsh.fit(X)
     >>>
     >>> # Query for candidates
@@ -54,16 +56,16 @@ class RPLSH:
     def __init__(
         self,
         n_hash_tables: int = 16,
-        n_projections: int = 8,
+        n_hashes: int = 8,
         seed: int = 42,
     ):
         if n_hash_tables <= 0:
             raise ValueError("n_hash_tables must be positive")
-        if n_projections <= 0:
-            raise ValueError("n_projections must be positive")
+        if n_hashes <= 0:
+            raise ValueError("n_hashes must be positive")
 
         self._n_hash_tables = n_hash_tables
-        self._n_projections = n_projections
+        self._n_hashes = n_hashes
         self._seed = seed
 
     @property
@@ -72,9 +74,9 @@ class RPLSH:
         return self._n_hash_tables
 
     @property
-    def n_projections(self) -> int:
-        """Number of projections per hash table."""
-        return self._n_projections
+    def n_hashes(self) -> int:
+        """Number of hashes per hash table."""
+        return self._n_hashes
 
     @property
     def seed(self) -> int:
@@ -98,7 +100,7 @@ class RPLSH:
         n_samples, n_features, dtype = get_array_info(X)
         X = ensure_device_array(X)
 
-        core = RPLSHCore(self._n_hash_tables, self._n_projections, self._seed)
+        core = RPLSHCore(self._n_hash_tables, self._n_hashes, self._seed)
 
         if dtype == np.float32:
             index = core.fit_float(X, n_samples, n_features)
@@ -111,7 +113,7 @@ class RPLSH:
 
         return RPLSHModel(
             n_hash_tables=self._n_hash_tables,
-            n_projections=self._n_projections,
+            n_hashes=self._n_hashes,
             n_features=n_features,
             core=core,
             index=index,
@@ -145,7 +147,7 @@ class RPLSH:
         n_samples, n_features, dtype = get_array_info(X)
         X = ensure_device_array(X)
 
-        core = RPLSHCore(self._n_hash_tables, self._n_projections, self._seed)
+        core = RPLSHCore(self._n_hash_tables, self._n_hashes, self._seed)
 
         if dtype == np.float32:
             return core.fit_query_float(X, n_samples, n_features)
@@ -165,8 +167,8 @@ class RPLSHModel:
     ----------
     n_hash_tables : int
         Number of hash tables.
-    n_projections : int
-        Number of projections per hash table.
+    n_hashes : int
+        Number of hashes per hash table.
     n_features : int
         Number of features.
     core : RPLSHCore
@@ -178,13 +180,13 @@ class RPLSHModel:
     def __init__(
         self,
         n_hash_tables: int,
-        n_projections: int,
+        n_hashes: int,
         n_features: int,
         core: RPLSHCore,
         index: Index,
     ):
         self._n_hash_tables = n_hash_tables
-        self._n_projections = n_projections
+        self._n_hashes = n_hashes
         self._n_features = n_features
         self._core = core
         self._index = index
@@ -195,9 +197,9 @@ class RPLSHModel:
         return self._n_hash_tables
 
     @property
-    def n_projections(self) -> int:
-        """Number of projections per hash table."""
-        return self._n_projections
+    def n_hashes(self) -> int:
+        """Number of hashes per hash table."""
+        return self._n_hashes
 
     @property
     def n_features(self) -> int:

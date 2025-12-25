@@ -97,7 +97,7 @@ def run_benchmark():
     )
     parser.add_argument("-nh", "--n-hash-tables", type=int, default=16)
     parser.add_argument(
-        "-np", "--n-projections", type=int, default=4, help="Number of projections"
+        "-np", "--n-hashes", type=int, default=4, help="Number of hashes per table"
     )
     parser.add_argument("-s", "--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
@@ -146,12 +146,12 @@ def run_benchmark():
     Q = read_fvecs(data_dir / "sift_query.fvecs")
 
     logger.info(
-        f"Parameters: n_hash_tables={args.n_hash_tables}, n_projections={args.n_projections}, seed={args.seed}"
+        f"Parameters: n_hash_tables={args.n_hash_tables}, n_hashes={args.n_hashes}, seed={args.seed}"
     )
 
     lsh = RPLSH(
         n_hash_tables=args.n_hash_tables,
-        n_projections=args.n_projections,
+        n_hashes=args.n_hashes,
         seed=args.seed,
     )
 
@@ -210,7 +210,7 @@ def run_benchmark():
 
     # Save report
     if args.results_dir:
-        report_path = f"{args.results_dir}/report_h{args.n_hash_tables}_p{args.n_projections}_{time.strftime('%Y%m%d_%H%M%S')}.json"
+        report_path = f"{args.results_dir}/report_h{args.n_hash_tables}_p{args.n_hashes}_{time.strftime('%Y%m%d_%H%M%S')}.json"
         os.makedirs(args.results_dir, exist_ok=True)
 
         with open(report_path, "w") as f:
@@ -222,7 +222,7 @@ def run_benchmark():
             report_data = {
                 "params": {
                     "n_hash_tables": args.n_hash_tables,
-                    "n_projections": args.n_projections,
+                    "n_hashes": args.n_hashes,
                     "seed": args.seed,
                     "n_queries": args.n_queries,
                     "mode": "fit_query" if args.fit_query else "fit+query",

@@ -34,7 +34,7 @@ X = np.random.randn(100, 128).astype(np.float32)
 Q = np.random.randn(10, 128).astype(np.float32)
 
 # Fit (returns RPLSHModel)
-model = RPLSH(n_hash_tables=16, n_projections=8, seed=42).fit(X)
+model = RPLSH(n_hash_tables=16, n_hashes=8, seed=42).fit(X)
 
 # Query (returns candidate neighbors)
 candidates = model.query(Q)
@@ -55,7 +55,7 @@ X = cp.random.randn(100, 128).astype(cp.float32)
 Q = cp.random.randn(10, 128).astype(cp.float32)
 
 # Fit (returns RPLSHModel)
-model = RPLSH(n_hash_tables=16, n_projections=8, seed=42).fit(X)
+model = RPLSH(n_hash_tables=16, n_hashes=8, seed=42).fit(X)
 
 # Query (returns candidate neighbors)
 candidates = model.query(Q)
@@ -75,7 +75,7 @@ from culsh import RPLSH
 X = np.random.randn(100, 128).astype(np.float32)
 
 # Fit + Query
-candidates = RPLSH(n_hash_tables=16, n_projections=8, seed=42).fit_query(X)
+candidates = RPLSH(n_hash_tables=16, n_hashes=8, seed=42).fit_query(X)
 
 # Get neighbors
 indices = candidates.get_indices()

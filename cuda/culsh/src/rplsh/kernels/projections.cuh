@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../utils/utils.cuh"
+#include "../../core/utils.cuh"
 #include <cstdint>
 #include <cuda_runtime.h>
 #include <curand.h>

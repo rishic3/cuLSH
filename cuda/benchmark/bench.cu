@@ -1,12 +1,12 @@
 #include "bench_utils.hpp"
 
-#include "../culsh/src/rplsh/candidates.cuh"
-#include "../culsh/src/rplsh/index.cuh"
-#include "../culsh/src/rplsh/kernels/fit.cuh"
+#include "../culsh/src/core/candidates.cuh"
+#include "../culsh/src/core/index.cuh"
+#include "../culsh/src/core/kernels/fit.cuh"
+#include "../culsh/src/core/kernels/query.cuh"
+#include "../culsh/src/core/utils.cuh"
 #include "../culsh/src/rplsh/kernels/hash.cuh"
 #include "../culsh/src/rplsh/kernels/projections.cuh"
-#include "../culsh/src/rplsh/kernels/query.cuh"
-#include "../culsh/src/rplsh/utils/utils.cuh"
 
 #include <chrono>
 #include <cublas_v2.h>
@@ -26,7 +26,7 @@ using namespace std;
 namespace fs = filesystem;
 
 culsh::rplsh::Index cuda_fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X_host,
-                             int n_samples, int n_features, int n_hash_tables, int n_projections,
+                             int n_samples, int n_features, int n_hash_tables, int n_hashes,
                              int seed, float** P_out) {
 
     // allocate GPU memory for X
@@ -38,7 +38,7 @@ culsh::rplsh::Index cuda_fit(cublasHandle_t cublas_handle, cudaStream_t stream, 
 
     // allocate P on GPU
     float* P;
-    int n_total_buckets = n_hash_tables * n_projections;
+    int n_total_buckets = n_hash_tables * n_hashes;
     CUDA_CHECK(cudaMalloc(&P, static_cast<size_t>(n_total_buckets) * n_features * sizeof(float)));
 
     // allocate X_hash
@@ -50,19 +50,18 @@ culsh::rplsh::Index cuda_fit(cublasHandle_t cublas_handle, cudaStream_t stream, 
     culsh::rplsh::detail::generate_random_projections<float>(stream, n_total_buckets, n_features,
                                                              seed, P);
     culsh::rplsh::detail::hash<float>(cublas_handle, stream, X_gpu, P, n_samples, n_features,
-                                      n_hash_tables, n_projections, X_hash);
+                                      n_hash_tables, n_hashes, X_hash);
 
     // compute binary signatures from X_hash
     int8_t* X_sig;
     CUDA_CHECK(
         cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * n_total_buckets * sizeof(int8_t)));
     culsh::rplsh::detail::compute_signatures<float>(stream, X_hash, n_samples, n_hash_tables,
-                                                    n_projections, X_sig);
+                                                    n_hashes, X_sig);
     CUDA_CHECK(cudaFree(X_hash)); // done with X_hash
 
     // build and return index
-    auto index =
-        culsh::rplsh::detail::fit_index(stream, X_sig, n_samples, n_hash_tables, n_projections);
+    auto index = culsh::rplsh::detail::fit_index(stream, X_sig, n_samples, n_hash_tables, n_hashes);
     CUDA_CHECK(cudaFree(X_sig));
     CUDA_CHECK(cudaFree(X_gpu));
 
@@ -73,7 +72,7 @@ culsh::rplsh::Index cuda_fit(cublasHandle_t cublas_handle, cudaStream_t stream, 
 // CUDA query function (adapted from main.cu)
 culsh::rplsh::Candidates cuda_query(cublasHandle_t cublas_handle, cudaStream_t stream,
                                     const float* Q_host, int n_queries, int n_features,
-                                    int n_hash_tables, int n_projections, float* P,
+                                    int n_hash_tables, int n_hashes, float* P,
                                     culsh::rplsh::Index* index) {
 
     // allocate GPU memory for Q
@@ -83,7 +82,7 @@ culsh::rplsh::Candidates cuda_query(cublasHandle_t cublas_handle, cudaStream_t s
                           static_cast<size_t>(n_queries) * n_features * sizeof(float),
                           cudaMemcpyHostToDevice));
 
-    int n_total_buckets = n_hash_tables * n_projections;
+    int n_total_buckets = n_hash_tables * n_hashes;
 
     // allocate Q_hash
     float* Q_hash;
@@ -92,7 +91,7 @@ culsh::rplsh::Candidates cuda_query(cublasHandle_t cublas_handle, cudaStream_t s
 
     // hash queries
     culsh::rplsh::detail::hash<float>(cublas_handle, stream, Q_gpu, P, n_queries, n_features,
-                                      n_hash_tables, n_projections, Q_hash);
+                                      n_hash_tables, n_hashes, Q_hash);
     CUDA_CHECK(cudaFree(Q_gpu));
 
     // allocate Q_sig
@@ -102,12 +101,12 @@ culsh::rplsh::Candidates cuda_query(cublasHandle_t cublas_handle, cudaStream_t s
 
     // convert hash values to signatures
     culsh::rplsh::detail::compute_signatures<float>(stream, Q_hash, n_queries, n_hash_tables,
-                                                    n_projections, Q_sig);
+                                                    n_hashes, Q_sig);
     CUDA_CHECK(cudaFree(Q_hash));
 
     // query index
-    culsh::rplsh::Candidates candidates = culsh::rplsh::detail::query_index(
-        stream, Q_sig, n_queries, n_hash_tables, n_projections, index);
+    culsh::rplsh::Candidates candidates =
+        culsh::rplsh::detail::query_index(stream, Q_sig, n_queries, n_hash_tables, n_hashes, index);
     CUDA_CHECK(cudaFree(Q_sig));
 
     return candidates;
@@ -117,7 +116,7 @@ struct Config {
     fs::path data_dir = "/home/rishic/Code/cu-lsh/data/sift";
     fs::path save_dir = "results";
     int n_hash_tables = 16;
-    int n_projections = 4;
+    int n_hashes = 4;
     unsigned int seed = random_device{}();
     int n_queries = 100;
 };
@@ -127,7 +126,7 @@ void print_usage(const char* program_name) {
          << "Options:\n"
          << "  -d, --data-dir        Data directory (default: data/sift)\n"
          << "  -h, --n-hash-tables   Number of hash tables (default: 16)\n"
-         << "  -p, --n-projections   Number of projections per table (default: 4)\n"
+         << "  -p, --n-hashes        Number of hashes per table (default: 4)\n"
          << "  -s, --seed            Random seed (default: random)\n"
          << "  -q, --num-queries     Number of test queries (default: 100)\n"
          << "  -o, --save-dir        Save directory for results (default: results)\n";
@@ -137,9 +136,9 @@ Config parse_args(int argc, char* argv[]) {
     Config conf;
 
     static struct option long_options[] = {
-        {"data-dir", required_argument, 0, 'd'},      {"n-hash-tables", required_argument, 0, 'h'},
-        {"n-projections", required_argument, 0, 'p'}, {"seed", required_argument, 0, 's'},
-        {"num-queries", required_argument, 0, 'q'},   {"save-dir", required_argument, 0, 'o'},
+        {"data-dir", required_argument, 0, 'd'},    {"n-hash-tables", required_argument, 0, 'h'},
+        {"n-hashes", required_argument, 0, 'p'},    {"seed", required_argument, 0, 's'},
+        {"num-queries", required_argument, 0, 'q'}, {"save-dir", required_argument, 0, 'o'},
     };
 
     int c;
@@ -152,7 +151,7 @@ Config parse_args(int argc, char* argv[]) {
             conf.n_hash_tables = atoi(optarg);
             break;
         case 'p':
-            conf.n_projections = atoi(optarg);
+            conf.n_hashes = atoi(optarg);
             break;
         case 's':
             conf.seed = atoi(optarg);
@@ -213,7 +212,7 @@ int main(int argc, char* argv[]) {
 
     cout << "\nLSH Model:" << endl;
     cout << "  n_hash_tables: " << conf.n_hash_tables << endl;
-    cout << "  n_projections: " << conf.n_projections << endl;
+    cout << "  n_hashes: " << conf.n_hashes << endl;
     cout << "  seed: " << conf.seed << endl;
     cout << endl;
 
@@ -222,7 +221,7 @@ int main(int argc, char* argv[]) {
     auto start_time = chrono::high_resolution_clock::now();
     float* P = nullptr;
     culsh::rplsh::Index index = cuda_fit(cublas_handle, stream, X, n_samples, n_features,
-                                         conf.n_hash_tables, conf.n_projections, conf.seed, &P);
+                                         conf.n_hash_tables, conf.n_hashes, conf.seed, &P);
     auto fit_time = chrono::high_resolution_clock::now() - start_time;
     auto fit_seconds = chrono::duration_cast<chrono::duration<double>>(fit_time).count();
     cout << "-> CUDA fit() completed in " << fit_seconds << "s" << endl << endl;
@@ -234,7 +233,7 @@ int main(int argc, char* argv[]) {
     start_time = chrono::high_resolution_clock::now();
     culsh::rplsh::Candidates candidates =
         cuda_query(cublas_handle, stream, Q_all, n_test_queries, n_features, conf.n_hash_tables,
-                   conf.n_projections, P, &index);
+                   conf.n_hashes, P, &index);
     auto query_time = chrono::high_resolution_clock::now() - start_time;
     auto query_seconds = chrono::duration_cast<chrono::duration<double>>(query_time).count();
     cout << "-> CUDA query() completed in " << query_seconds << "s" << endl << endl;
@@ -272,7 +271,7 @@ int main(int argc, char* argv[]) {
     stringstream ss;
     ss << put_time(localtime(&time_t), "%Y%m%d_%H%M%S");
     string report_filename = "report_h" + to_string(conf.n_hash_tables) + "_p" +
-                             to_string(conf.n_projections) + "_" + ss.str() + ".json";
+                             to_string(conf.n_hashes) + "_" + ss.str() + ".json";
     fs::path report_path = abs_save_dir / report_filename;
 
     ofstream report(report_path);
@@ -282,7 +281,7 @@ int main(int argc, char* argv[]) {
     report << "{\n";
     report << "    \"params\": {\n";
     report << "        \"n_hash_tables\": " << conf.n_hash_tables << ",\n";
-    report << "        \"n_projections\": " << conf.n_projections << ",\n";
+    report << "        \"n_hashes\": " << conf.n_hashes << ",\n";
     report << "        \"seed\": " << conf.seed << ",\n";
     report << "        \"num_queries\": " << conf.n_queries << "\n";
     report << "    },\n";

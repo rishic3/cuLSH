@@ -3,8 +3,8 @@
 
 #include <culsh/rplsh/params.hpp>
 #include <culsh/rplsh/rplsh.hpp>
-#include <rplsh/candidates.cuh>
-#include <rplsh/index.cuh>
+#include <core/candidates.cuh>
+#include <core/index.cuh>
 
 #include <optional>
 #include <pybind11/stl.h>
@@ -17,20 +17,20 @@ namespace python {
 class RPLSHCore : public CUDAResourceManager {
   private:
     int n_hash_tables_ = 0;
-    int n_projections_ = 0;
+    int n_hashes_ = 0;
     uint64_t seed_ = 0;
 
   public:
-    RPLSHCore(int n_hash_tables, int n_projections, uint64_t seed = 42)
+    RPLSHCore(int n_hash_tables, int n_hashes, uint64_t seed = 42)
         : CUDAResourceManager(),
           n_hash_tables_(n_hash_tables),
-          n_projections_(n_projections),
+          n_hashes_(n_hashes),
           seed_(seed) {}
 
     std::unique_ptr<rplsh::Index> fit_float(py::object X_obj, int n_samples, int n_features) {
         float* X_ptr = get_device_pointer<float>(X_obj);
 
-        culsh::RPLSHParams params{n_hash_tables_, n_projections_, seed_};
+        culsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
         auto index = rplsh::fit(cublas_handle_, stream_, X_ptr, n_samples, n_features, params);
 
         synchronize();
@@ -40,7 +40,7 @@ class RPLSHCore : public CUDAResourceManager {
     std::unique_ptr<rplsh::Index> fit_double(py::object X_obj, int n_samples, int n_features) {
         double* X_ptr = get_device_pointer<double>(X_obj);
 
-        culsh::RPLSHParams params{n_hash_tables_, n_projections_, seed_};
+        culsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
         auto index = rplsh::fit(cublas_handle_, stream_, X_ptr, n_samples, n_features, params);
 
         synchronize();
@@ -83,7 +83,7 @@ class RPLSHCore : public CUDAResourceManager {
                                                        int n_features) {
         float* X_ptr = get_device_pointer<float>(X_obj);
 
-        culsh::RPLSHParams params{n_hash_tables_, n_projections_, seed_};
+        culsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
         auto candidates = rplsh::fit_query(cublas_handle_, stream_, X_ptr, n_samples, n_features, params);
 
         synchronize();
@@ -94,7 +94,7 @@ class RPLSHCore : public CUDAResourceManager {
                                                         int n_features) {
         double* X_ptr = get_device_pointer<double>(X_obj);
 
-        culsh::RPLSHParams params{n_hash_tables_, n_projections_, seed_};
+        culsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
         auto candidates = rplsh::fit_query(cublas_handle_, stream_, X_ptr, n_samples, n_features, params);
 
         synchronize();
@@ -102,7 +102,7 @@ class RPLSHCore : public CUDAResourceManager {
     }
 
     int n_hash_tables() const { return n_hash_tables_; }
-    int n_projections() const { return n_projections_; }
+    int n_hashes() const { return n_hashes_; }
     uint64_t seed() const { return seed_; }
 };
 
@@ -194,7 +194,7 @@ PYBIND11_MODULE(_culsh_core, m) {
         .def_readonly("n_total_candidates", &Index::n_total_candidates)
         .def_readonly("n_total_buckets", &Index::n_total_buckets)
         .def_readonly("n_hash_tables", &Index::n_hash_tables)
-        .def_readonly("n_projections", &Index::n_projections)
+        .def_readonly("n_hashes", &Index::n_hashes)
         .def_readonly("n_features", &Index::n_features)
         .def_readonly("seed", &Index::seed)
         .def_readonly("is_double", &Index::is_double);
@@ -209,7 +209,7 @@ PYBIND11_MODULE(_culsh_core, m) {
 
     py::class_<RPLSHCore>(m, "RPLSHCore")
         .def(py::init<int, int, uint64_t>(),
-             py::arg("n_hash_tables"), py::arg("n_projections"), py::arg("seed") = 42)
+             py::arg("n_hash_tables"), py::arg("n_hashes"), py::arg("seed") = 42)
         .def("fit_float", &RPLSHCore::fit_float)
         .def("fit_double", &RPLSHCore::fit_double)
         .def("query_float", &RPLSHCore::query_float,
@@ -219,6 +219,6 @@ PYBIND11_MODULE(_culsh_core, m) {
         .def("fit_query_float", &RPLSHCore::fit_query_float)
         .def("fit_query_double", &RPLSHCore::fit_query_double)
         .def_property_readonly("n_hash_tables", &RPLSHCore::n_hash_tables)
-        .def_property_readonly("n_projections", &RPLSHCore::n_projections)
+        .def_property_readonly("n_hashes", &RPLSHCore::n_hashes)
         .def_property_readonly("seed", &RPLSHCore::seed);
 }
