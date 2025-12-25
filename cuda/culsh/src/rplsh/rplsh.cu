@@ -44,7 +44,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int
     CUDA_CHECK(cudaFree(X_hash));
 
     // Build index
-    auto index = core::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
+    auto index = core::detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
     CUDA_CHECK(cudaFree(X_sig));
 
     // Store projection matrix and metadata in index
@@ -84,7 +84,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, in
     CUDA_CHECK(cudaFree(X_hash));
 
     // Build index
-    auto index = core::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
+    auto index = core::detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
     CUDA_CHECK(cudaFree(X_sig));
 
     // Store projection matrix and metadata in index
@@ -121,7 +121,7 @@ Candidates query(cublasHandle_t cublas_handle, cudaStream_t stream, const float*
 
     // Query index for candidate indices
     auto candidates =
-        core::query_index(stream, Q_sig, n_queries, n_hash_tables, n_hashes, &index);
+        core::detail::query_index(stream, Q_sig, n_queries, n_hash_tables, n_hashes, &index);
     CUDA_CHECK(cudaFree(Q_sig));
 
     return candidates;
@@ -152,7 +152,7 @@ Candidates query(cublasHandle_t cublas_handle, cudaStream_t stream, const double
 
     // Query index for candidate indices
     auto candidates =
-        core::query_index(stream, Q_sig, n_queries, n_hash_tables, n_hashes, &index);
+        core::detail::query_index(stream, Q_sig, n_queries, n_hash_tables, n_hashes, &index);
     CUDA_CHECK(cudaFree(Q_sig));
 
     return candidates;
@@ -187,7 +187,7 @@ Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const fl
 
     // Fit index and query candidates directly (X_sig == Q_sig)
     auto candidates =
-        core::fit_query(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
+        core::detail::fit_query(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
     CUDA_CHECK(cudaFree(X_sig));
 
     return candidates;
@@ -222,7 +222,7 @@ Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const do
 
     // Fit index and query candidates directly (X_sig == Q_sig)
     auto candidates =
-        core::fit_query(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
+        core::detail::fit_query(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
     CUDA_CHECK(cudaFree(X_sig));
 
     return candidates;

@@ -15,6 +15,7 @@
 
 namespace culsh {
 namespace core {
+namespace detail {
 
 /**
  * @brief Fit and query to get all-neighbors candidates
@@ -52,5 +53,6 @@ Candidates fit_query(cudaStream_t stream, const int8_t* X_sig, int n_samples, in
     return candidates;
 }
 
+} // namespace detail
 } // namespace core
 } // namespace culsh

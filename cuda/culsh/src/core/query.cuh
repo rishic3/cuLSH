@@ -15,6 +15,7 @@
 
 namespace culsh {
 namespace core {
+namespace detail {
 
 /**
  * @brief Binary search for the given query signature amongst all bucket signatures
@@ -505,5 +506,6 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     return candidates;
 }
 
+} // namespace detail
 } // namespace core
 } // namespace culsh
