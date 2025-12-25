@@ -1,8 +1,8 @@
+#include "core/fit.cuh"
 #include "core/index.cuh"
-#include "core/kernels/fit.cuh"
-#include "core/kernels/query.cuh"
-#include "rplsh/kernels/hash.cuh"
-#include "rplsh/kernels/projections.cuh"
+#include "core/query.cuh"
+#include "rplsh/hash.cuh"
+#include "rplsh/projections.cuh"
 
 #include <chrono>
 #include <cuda_runtime.h>

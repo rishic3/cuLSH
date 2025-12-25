@@ -1,10 +1,10 @@
 #include "../core/candidates.cuh"
+#include "../core/fit.cuh"
+#include "../core/fit_query.cuh"
 #include "../core/index.cuh"
-#include "../core/kernels/fit.cuh"
-#include "../core/kernels/fit_query.cuh"
-#include "../core/kernels/query.cuh"
-#include "kernels/hash.cuh"
-#include "kernels/projections.cuh"
+#include "../core/query.cuh"
+#include "hash.cuh"
+#include "projections.cuh"
 #include <cuda_runtime.h>
 #include <culsh/rplsh/params.hpp>
 #include <culsh/rplsh/rplsh.hpp>

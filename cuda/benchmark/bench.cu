@@ -1,12 +1,12 @@
 #include "bench_utils.hpp"
 
 #include "../culsh/src/core/candidates.cuh"
+#include "../culsh/src/core/fit.cuh"
 #include "../culsh/src/core/index.cuh"
-#include "../culsh/src/core/kernels/fit.cuh"
-#include "../culsh/src/core/kernels/query.cuh"
+#include "../culsh/src/core/query.cuh"
 #include "../culsh/src/core/utils.cuh"
-#include "../culsh/src/rplsh/kernels/hash.cuh"
-#include "../culsh/src/rplsh/kernels/projections.cuh"
+#include "../culsh/src/rplsh/hash.cuh"
+#include "../culsh/src/rplsh/projections.cuh"
 
 #include <chrono>
 #include <cublas_v2.h>

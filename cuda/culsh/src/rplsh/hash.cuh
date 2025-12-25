@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../core/utils.cuh"
+#include "../core/utils.cuh"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
