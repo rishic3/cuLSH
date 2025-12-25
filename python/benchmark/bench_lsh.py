@@ -55,34 +55,52 @@ def candidates_to_list(candidates):
     return result
 
 
-def evaluate_recall(Q, X, all_neighbors, n_eval_queries):
-    """Evaluate recall for the first n_eval_queries queries"""
-    per_query_recall = []
+def evaluate_recall(Q, X, all_neighbors, n_eval_queries, recall_k_values):
+    """Evaluate recall@k for the first n_eval_queries queries"""
+    n_dataset = len(X)
+    candidate_counts = []
     queries_with_candidates = 0
 
+    recall_at_k = {k: [] for k in recall_k_values}
     for i in range(n_eval_queries):
         lsh_indices = all_neighbors[i]
-        k = len(lsh_indices)
+        n_candidates = len(lsh_indices)
+        candidate_counts.append(n_candidates)
 
-        if k == 0:
-            per_query_recall.append(0.0)
+        if n_candidates == 0:
+            for k in recall_k_values:
+                recall_at_k[k].append(0.0)
             logger.debug(f"  Query {i}: no candidates")
             continue
 
         queries_with_candidates += 1
-        gt_indices = get_gt_top_k_indices(Q[i], X, k)
-        recall_score = compute_recall(lsh_indices, gt_indices)
-        per_query_recall.append(recall_score)
 
-        logger.debug(f"  Query {i}: recall={recall_score:.4f} (k={k})")
+        # Compute recall@k for each k
+        for k in recall_k_values:
+            gt_indices = get_gt_top_k_indices(Q[i], X, k)
+            recall_score = compute_recall(lsh_indices, gt_indices)
+            recall_at_k[k].append(recall_score)
 
-    avg_recall = np.mean(per_query_recall) if per_query_recall else 0.0
+        if logger.isEnabledFor(logging.DEBUG):
+            recalls_str = ", ".join(
+                f"R@{k}={recall_at_k[k][-1]:.4f}" for k in recall_k_values
+            )
+            logger.debug(f"  Query {i}: {recalls_str} (candidates={n_candidates})")
+
+    # Compute averages
+    avg_recall_at_k = {k: float(np.mean(recalls)) for k, recalls in recall_at_k.items()}
+    mean_candidates = float(np.mean(candidate_counts))
+    selectivity = mean_candidates / n_dataset
 
     return {
         "n_eval_queries": n_eval_queries,
         "queries_with_candidates": queries_with_candidates,
-        "avg_recall": float(avg_recall),
-        "per_query_recall": [float(r) for r in per_query_recall],
+        "recall_at_k": avg_recall_at_k,
+        "mean_candidates": mean_candidates,
+        "selectivity": selectivity,
+        "per_query_recall_at_k": {
+            k: [float(r) for r in recalls] for k, recalls in recall_at_k.items()
+        },
     }
 
 
@@ -111,6 +129,13 @@ def run_benchmark():
         help="Number of evaluation queries",
     )
     parser.add_argument(
+        "-k",
+        "--recall-k",
+        type=str,
+        default="10,100",
+        help="Comma-separated k values for recall@k (default: 1,10,100)",
+    )
+    parser.add_argument(
         "-r",
         "--results-dir",
         type=str,
@@ -135,6 +160,8 @@ def run_benchmark():
 
     if args.verbose:
         logger.setLevel(logging.DEBUG)
+
+    recall_k_values = [int(k.strip()) for k in args.recall_k.split(",")]
 
     data_dir = Path(args.data_dir)
     if not data_dir.exists():
@@ -206,7 +233,9 @@ def run_benchmark():
         logger.warning("No queries to evaluate (no candidates returned).")
         return
 
-    recall_results = evaluate_recall(Q_test, X_train, all_neighbors, n_eval)
+    recall_results = evaluate_recall(
+        Q_test, X_train, all_neighbors, n_eval, recall_k_values
+    )
 
     # Save report
     if args.results_dir:
@@ -225,6 +254,7 @@ def run_benchmark():
                     "n_hashes": args.n_hashes,
                     "seed": args.seed,
                     "n_queries": args.n_queries,
+                    "recall_k": recall_k_values,
                     "mode": "fit_query" if args.fit_query else "fit+query",
                 },
                 "runtimes": runtimes,
@@ -242,8 +272,12 @@ def run_benchmark():
             logger.info(f"  fit_time: {fit_time:.4f}s")
             logger.info(f"  query_time: {query_time:.4f}s")
         logger.info(
-            f"  average recall ({recall_results['queries_with_candidates']}/{n_eval} queries with candidates): {recall_results['avg_recall']:.4f}"
+            f"  queries with candidates: {recall_results['queries_with_candidates']}/{n_eval}"
         )
+        logger.info(f"  mean candidates: {recall_results['mean_candidates']:.1f}")
+        logger.info(f"  selectivity: {recall_results['selectivity']:.6f}")
+        for k, recall in recall_results["recall_at_k"].items():
+            logger.info(f"  recall@{k}: {recall:.4f}")
         logger.info("=" * 50)
 
 
