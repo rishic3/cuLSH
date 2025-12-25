@@ -125,8 +125,8 @@ void print_usage(const char* program_name) {
     cout << "Usage: " << program_name << " [options]\n"
          << "Options:\n"
          << "  -d, --data-dir        Data directory (default: data/sift)\n"
-         << "  -h, --n-hash-tables   Number of hash tables (default: 16)\n"
-         << "  -p, --n-hashes        Number of hashes per table (default: 4)\n"
+         << "  -t, --n-hash-tables   Number of hash tables (default: 16)\n"
+         << "  -h, --n-hashes        Number of hashes per table (default: 4)\n"
          << "  -s, --seed            Random seed (default: random)\n"
          << "  -q, --num-queries     Number of test queries (default: 100)\n"
          << "  -o, --save-dir        Save directory for results (default: results)\n";
@@ -136,21 +136,21 @@ Config parse_args(int argc, char* argv[]) {
     Config conf;
 
     static struct option long_options[] = {
-        {"data-dir", required_argument, 0, 'd'},    {"n-hash-tables", required_argument, 0, 'h'},
-        {"n-hashes", required_argument, 0, 'p'},    {"seed", required_argument, 0, 's'},
+        {"data-dir", required_argument, 0, 'd'},    {"n-hash-tables", required_argument, 0, 't'},
+        {"n-hashes", required_argument, 0, 'h'},    {"seed", required_argument, 0, 's'},
         {"num-queries", required_argument, 0, 'q'}, {"save-dir", required_argument, 0, 'o'},
     };
 
     int c;
-    while ((c = getopt_long(argc, argv, "d:h:p:s:q:o:", long_options, nullptr)) != -1) {
+    while ((c = getopt_long(argc, argv, "d:t:h:s:q:o:", long_options, nullptr)) != -1) {
         switch (c) {
         case 'd':
             conf.data_dir = optarg;
             break;
-        case 'h':
+        case 't':
             conf.n_hash_tables = atoi(optarg);
             break;
-        case 'p':
+        case 'h':
             conf.n_hashes = atoi(optarg);
             break;
         case 's':

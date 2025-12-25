@@ -95,9 +95,9 @@ def run_benchmark():
         required=True,
         help="Path to directory containing SIFT dataset",
     )
-    parser.add_argument("-nh", "--n-hash-tables", type=int, default=16)
+    parser.add_argument("-nt", "--n-hash-tables", type=int, default=16)
     parser.add_argument(
-        "-np", "--n-hashes", type=int, default=4, help="Number of hashes per table"
+        "-nh", "--n-hashes", type=int, default=4, help="Number of hashes per table"
     )
     parser.add_argument("-s", "--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
