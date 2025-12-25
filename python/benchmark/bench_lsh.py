@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 
 from culsh import RPLSH
 
@@ -62,7 +63,7 @@ def evaluate_recall(Q, X, all_neighbors, n_eval_queries, recall_k_values):
     queries_with_candidates = 0
 
     recall_at_k = {k: [] for k in recall_k_values}
-    for i in range(n_eval_queries):
+    for i in tqdm(range(n_eval_queries), desc="Evaluating recall", ncols=100):
         lsh_indices = all_neighbors[i]
         n_candidates = len(lsh_indices)
         candidate_counts.append(n_candidates)
