@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 namespace culsh {
-namespace rplsh {
+namespace core {
 
 /**
  * @brief GPU LSH index
@@ -232,5 +232,5 @@ struct Index {
     }
 };
 
-} // namespace rplsh
+} // namespace core
 } // namespace culsh

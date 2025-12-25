@@ -41,8 +41,7 @@
 #endif
 
 namespace culsh {
-namespace rplsh {
-namespace detail {
+namespace core {
 
 /**
  * @brief Ensures sufficient temporary storage is allocated for a CUB operations
@@ -66,6 +65,5 @@ inline void ensure_temp_storage(void** d_temp_storage, size_t& current_bytes,
     }
 }
 
-} // namespace detail
-} // namespace rplsh
+} // namespace core
 } // namespace culsh

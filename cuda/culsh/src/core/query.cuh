@@ -14,8 +14,7 @@
 #include <thrust/sequence.h>
 
 namespace culsh {
-namespace rplsh {
-namespace detail {
+namespace core {
 
 /**
  * @brief Binary search for the given query signature amongst all bucket signatures
@@ -506,6 +505,5 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
     return candidates;
 }
 
-} // namespace detail
-} // namespace rplsh
+} // namespace core
 } // namespace culsh

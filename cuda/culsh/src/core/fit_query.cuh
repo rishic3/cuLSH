@@ -14,8 +14,7 @@
 #include <thrust/sequence.h>
 
 namespace culsh {
-namespace rplsh {
-namespace detail {
+namespace core {
 
 /**
  * @brief Fit and query to get all-neighbors candidates
@@ -53,6 +52,5 @@ Candidates fit_query(cudaStream_t stream, const int8_t* X_sig, int n_samples, in
     return candidates;
 }
 
-} // namespace detail
-} // namespace rplsh
+} // namespace core
 } // namespace culsh

@@ -11,8 +11,7 @@
 #include <thrust/sequence.h>
 
 namespace culsh {
-namespace rplsh {
-namespace detail {
+namespace core {
 
 /**
  * @brief Extract n-th byte of signature for radix sort
@@ -355,6 +354,5 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
     return index;
 }
 
-} // namespace detail
-} // namespace rplsh
+} // namespace core
 } // namespace culsh

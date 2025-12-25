@@ -4,17 +4,17 @@
 #include <cublas_v2.h>
 
 namespace culsh {
+
+// Forward declarations
+namespace core {
+struct Index;
+struct Candidates;
+} // namespace core
+
 namespace rplsh {
 
-/**
- * @brief Random Projection LSH index
- */
-struct Index;
-
-/**
- * @brief Random Projection LSH candidates
- */
-struct Candidates;
+using Index = core::Index;
+using Candidates = core::Candidates;
 
 /**
  * @brief Fit the RPLSH index

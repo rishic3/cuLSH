@@ -5,7 +5,7 @@
 #include <thrust/transform.h>
 
 namespace culsh {
-namespace rplsh {
+namespace core {
 
 /**
  * @brief GPU candidates results
@@ -194,5 +194,5 @@ inline void Candidates::merge(cudaStream_t stream, Candidates&& other) {
     n_total_candidates = new_n_total;
 }
 
-} // namespace rplsh
+} // namespace core
 } // namespace culsh
