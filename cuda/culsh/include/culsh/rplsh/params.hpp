@@ -3,6 +3,7 @@
 #include <cstdint>
 
 namespace culsh {
+namespace rplsh {
 
 /**
  * @brief Random Projection LSH parameters
@@ -29,4 +30,5 @@ struct RPLSHParams {
     uint64_t seed;
 };
 
+} // namespace rplsh
 } // namespace culsh

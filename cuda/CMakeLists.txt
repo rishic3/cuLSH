@@ -29,22 +29,17 @@ set_target_properties(culsh_lib PROPERTIES
     CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
-# main
-add_executable(main culsh/src/main.cu)
-target_link_libraries(main culsh_lib)
-
 # benchmark
 add_executable(benchmark 
     benchmark/bench.cu
     benchmark/bench_utils.cpp
 )
 target_include_directories(benchmark PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/culsh/include
     ${CMAKE_CURRENT_SOURCE_DIR}/culsh/src
 )
 target_link_libraries(benchmark
-    CUDA::curand
-    CUDA::cudart
-    CUDA::cublas
+    culsh_lib
 )
 
 # build type

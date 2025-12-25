@@ -30,7 +30,7 @@ class RPLSHCore : public CUDAResourceManager {
     std::unique_ptr<rplsh::Index> fit_float(py::object X_obj, int n_samples, int n_features) {
         float* X_ptr = get_device_pointer<float>(X_obj);
 
-        culsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
+        culsh::rplsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
         auto index = rplsh::fit(cublas_handle_, stream_, X_ptr, n_samples, n_features, params);
 
         synchronize();
@@ -40,7 +40,7 @@ class RPLSHCore : public CUDAResourceManager {
     std::unique_ptr<rplsh::Index> fit_double(py::object X_obj, int n_samples, int n_features) {
         double* X_ptr = get_device_pointer<double>(X_obj);
 
-        culsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
+        culsh::rplsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
         auto index = rplsh::fit(cublas_handle_, stream_, X_ptr, n_samples, n_features, params);
 
         synchronize();
@@ -83,7 +83,7 @@ class RPLSHCore : public CUDAResourceManager {
                                                        int n_features) {
         float* X_ptr = get_device_pointer<float>(X_obj);
 
-        culsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
+        culsh::rplsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
         auto candidates = rplsh::fit_query(cublas_handle_, stream_, X_ptr, n_samples, n_features, params);
 
         synchronize();
@@ -94,7 +94,7 @@ class RPLSHCore : public CUDAResourceManager {
                                                         int n_features) {
         double* X_ptr = get_device_pointer<double>(X_obj);
 
-        culsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
+        culsh::rplsh::RPLSHParams params{n_hash_tables_, n_hashes_, seed_};
         auto candidates = rplsh::fit_query(cublas_handle_, stream_, X_ptr, n_samples, n_features, params);
 
         synchronize();
