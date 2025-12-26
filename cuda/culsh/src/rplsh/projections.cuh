@@ -1,7 +1,9 @@
 #pragma once
 
+#include "../core/constants.cuh"
 #include "../core/utils.cuh"
 #include <cstdint>
+#include <cub/block/block_reduce.cuh>
 #include <cuda_runtime.h>
 #include <curand.h>
 #include <device_launch_parameters.h>
@@ -11,8 +13,6 @@
 namespace culsh {
 namespace rplsh {
 namespace detail {
-
-static constexpr int BLOCK_SIZE = 256;
 
 /**
  * @brief Calculate and apply row-wise normalization to matrix P.
@@ -27,34 +27,31 @@ __global__ void normalize_vectors_kernel(int n_samples, int n_features, DType* P
     if (row_idx >= n_samples)
         return;
 
-    // Store partial sum of squares for each thread
-    extern __shared__ char sdata_raw[];
-    DType* sdata = reinterpret_cast<DType*>(sdata_raw);
-
+    // Compute partial sum of squares for this row
     unsigned int tid = threadIdx.x;
-
     DType sum_sq = DType(0.0);
-    for (size_t col_idx = tid; col_idx < n_features; col_idx += blockDim.x) {
-        DType val = P[row_idx * n_features + col_idx];
+    for (size_t col_idx = tid; col_idx < static_cast<size_t>(n_features); col_idx += blockDim.x) {
+        DType val = P[row_idx * static_cast<size_t>(n_features) + col_idx];
         sum_sq += val * val;
     }
-    sdata[tid] = sum_sq;
-    __syncthreads();
 
-    // Reduce to get sum of squares for row
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            sdata[tid] += sdata[tid + s];
-        }
-        __syncthreads();
+    // Block-wide reduce to get sum of squares for row
+    using BlockReduce = cub::BlockReduce<DType, core::BLOCK_SIZE>;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+    __shared__ DType row_norm;
+
+    DType sum_sq_total = BlockReduce(temp_storage).Sum(sum_sq);
+    if (tid == 0) {
+        row_norm = sqrt(sum_sq_total);
     }
-    DType row_norm = sqrt(sdata[0]);
+    __syncthreads();
 
     // Normalize row
     if (row_norm > DType(1e-8)) { // check div by zero
         DType inv_norm = DType(1.0) / row_norm;
-        for (size_t col_idx = tid; col_idx < n_features; col_idx += blockDim.x) {
-            P[row_idx * n_features + col_idx] *= inv_norm;
+        for (size_t col_idx = tid; col_idx < static_cast<size_t>(n_features);
+             col_idx += blockDim.x) {
+            P[row_idx * static_cast<size_t>(n_features) + col_idx] *= inv_norm;
         }
     }
 }
@@ -72,6 +69,7 @@ void generate_random_projections(cudaStream_t stream, int n_samples, int n_featu
                                  DType* P) {
     curandGenerator_t rng;
     CURAND_CHECK(curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT));
+    CURAND_CHECK(curandSetStream(rng, stream));
     CURAND_CHECK(curandSetPseudoRandomGeneratorSeed(rng, seed));
 
     size_t projection_size = static_cast<size_t>(n_samples) * n_features;
@@ -87,10 +85,8 @@ void generate_random_projections(cudaStream_t stream, int n_samples, int n_featu
     }
 
     // Launch row-wise norm kernel
-    int block_size = std::min(n_features, BLOCK_SIZE);
-    int smem_size = block_size * sizeof(DType);
     normalize_vectors_kernel<DType>
-        <<<n_samples, block_size, smem_size, stream>>>(n_samples, n_features, P);
+        <<<n_samples, core::BLOCK_SIZE, 0, stream>>>(n_samples, n_features, P);
 
     CURAND_CHECK(curandDestroyGenerator(rng));
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "constants.cuh"
 #include "index.cuh"
 #include "utils.cuh"
 #include <cstdint>
@@ -13,8 +14,6 @@
 namespace culsh {
 namespace core {
 namespace detail {
-
-static constexpr int BLOCK_SIZE = 256;
 
 /**
  * @brief Extract n-th byte of signature for radix sort

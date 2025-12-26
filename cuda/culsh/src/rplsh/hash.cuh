@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/constants.cuh"
 #include "../core/utils.cuh"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
@@ -9,8 +10,6 @@
 namespace culsh {
 namespace rplsh {
 namespace detail {
-
-static constexpr int BLOCK_SIZE = 256;
 
 /**
  * @brief Convert hashed input matrix to binary signatures, laid out contiguously per table
@@ -53,7 +52,7 @@ __global__ void compute_signatures_kernel(const DType* X_hash, int n_samples, in
 template <typename DType>
 void compute_signatures(cudaStream_t stream, const DType* X_hash, int n_samples, int n_hash_tables,
                         int n_hashes, int8_t* X_sig) {
-    dim3 block_size(BLOCK_SIZE);
+    dim3 block_size(core::BLOCK_SIZE);
     size_t total_elements = static_cast<size_t>(n_samples) * n_hash_tables * n_hashes;
     dim3 grid_size((total_elements + block_size.x - 1) / block_size.x);
     compute_signatures_kernel<<<grid_size, block_size, 0, stream>>>(X_hash, n_samples,

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "candidates.cuh"
+#include "constants.cuh"
 #include "index.cuh"
 #include "utils.cuh"
 #include <cstdint>
@@ -16,8 +17,6 @@
 namespace culsh {
 namespace core {
 namespace detail {
-
-static constexpr int BLOCK_SIZE = 256;
 
 /**
  * @brief Binary search for the given query signature amongst all bucket signatures
