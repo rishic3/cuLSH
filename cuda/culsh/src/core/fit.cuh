@@ -14,6 +14,8 @@ namespace culsh {
 namespace core {
 namespace detail {
 
+static constexpr int BLOCK_SIZE = 256;
+
 /**
  * @brief Extract n-th byte of signature for radix sort
  * @param[in] X_sig Device pointer to signature matrix
@@ -209,7 +211,7 @@ __global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* so
 Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_hash_tables,
                 int n_hashes, int* d_item_to_bucket = nullptr) {
     size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
-    dim3 block_size(256);
+    dim3 block_size(BLOCK_SIZE);
     dim3 grid_size((n_items + block_size.x - 1) / block_size.x);
 
     // Create a searchable index structure from the given signature matrix.

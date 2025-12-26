@@ -10,8 +10,10 @@ namespace culsh {
 namespace rplsh {
 namespace detail {
 
+static constexpr int BLOCK_SIZE = 256;
+
 /**
- * @brief Convert hashed input matrix to binary signatures, laid out contiguously per table.
+ * @brief Convert hashed input matrix to binary signatures, laid out contiguously per table
  */
 template <typename DType>
 __global__ void compute_signatures_kernel(const DType* X_hash, int n_samples, int n_hash_tables,
@@ -40,18 +42,18 @@ __global__ void compute_signatures_kernel(const DType* X_hash, int n_samples, in
 }
 
 /**
- * @brief Compute signatures from hashed input vectors.
- * @param[in] stream CUDA stream.
- * @param[in] X_hash Hashed input vectors (n_samples x n_hash_tables * n_hashes).
- * @param[in] n_samples Number of input vectors.
- * @param[in] n_hash_tables Number of hash tables.
- * @param[in] n_hashes Number of hashes per table.
- * @param[out] X_sig Compressed output signatures (n_samples x n_hash_tables * n_hashes).
+ * @brief Compute signatures from hashed input vectors
+ * @param[in] stream CUDA stream
+ * @param[in] X_hash Hashed input vectors (n_samples x n_hash_tables * n_hashes)
+ * @param[in] n_samples Number of input vectors
+ * @param[in] n_hash_tables Number of hash tables
+ * @param[in] n_hashes Number of hashes per table
+ * @param[out] X_sig Compressed output signatures (n_samples x n_hash_tables * n_hashes)
  */
 template <typename DType>
 void compute_signatures(cudaStream_t stream, const DType* X_hash, int n_samples, int n_hash_tables,
                         int n_hashes, int8_t* X_sig) {
-    dim3 block_size(256);
+    dim3 block_size(BLOCK_SIZE);
     size_t total_elements = static_cast<size_t>(n_samples) * n_hash_tables * n_hashes;
     dim3 grid_size((total_elements + block_size.x - 1) / block_size.x);
     compute_signatures_kernel<<<grid_size, block_size, 0, stream>>>(X_hash, n_samples,

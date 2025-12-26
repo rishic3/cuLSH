@@ -44,7 +44,8 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int
     CUDA_CHECK(cudaFree(X_hash));
 
     // Build index
-    auto index = core::detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
+    auto index =
+        core::detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
     CUDA_CHECK(cudaFree(X_sig));
 
     // Store projection matrix and metadata in index
@@ -84,7 +85,8 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, in
     CUDA_CHECK(cudaFree(X_hash));
 
     // Build index
-    auto index = core::detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
+    auto index =
+        core::detail::fit_index(stream, X_sig, n_samples, params.n_hash_tables, params.n_hashes);
     CUDA_CHECK(cudaFree(X_sig));
 
     // Store projection matrix and metadata in index

@@ -17,6 +17,8 @@ namespace culsh {
 namespace core {
 namespace detail {
 
+static constexpr int BLOCK_SIZE = 256;
+
 /**
  * @brief Binary search for the given query signature amongst all bucket signatures
  * @param[in] all_bucket_signatures Device pointer to array of all bucket signatures for each table
@@ -283,7 +285,7 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
                                              const int* d_matched_bucket_indices, int n_queries,
                                              int n_hash_tables, const Index* index) {
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
-    dim3 block_size(256);
+    dim3 block_size(BLOCK_SIZE);
     dim3 grid_size_items((n_items + block_size.x - 1) / block_size.x);
     dim3 grid_size_queries((n_queries + block_size.x - 1) / block_size.x);
 
@@ -481,7 +483,7 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
 Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, int n_hash_tables,
                        int n_hashes, const Index* index) {
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
-    dim3 block_size(256);
+    dim3 block_size(BLOCK_SIZE);
     dim3 grid_size_items((n_items + block_size.x - 1) / block_size.x);
 
     // For each query, we look at each hash table (aka, column of width n_hashes)

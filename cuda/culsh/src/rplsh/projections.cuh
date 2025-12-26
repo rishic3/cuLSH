@@ -12,8 +12,13 @@ namespace culsh {
 namespace rplsh {
 namespace detail {
 
+static constexpr int BLOCK_SIZE = 256;
+
 /**
  * @brief Calculate and apply row-wise normalization to matrix P.
+ * @param[in] n_samples Number of samples
+ * @param[in] n_features Number of features
+ * @param[in] P Device pointer to n_samples x n_features array of random unit vectors
  */
 template <typename DType>
 __global__ void normalize_vectors_kernel(int n_samples, int n_features, DType* P) {
@@ -24,8 +29,7 @@ __global__ void normalize_vectors_kernel(int n_samples, int n_features, DType* P
 
     // Store partial sum of squares for each thread
     extern __shared__ char sdata_raw[];
-    DType* sdata =
-        reinterpret_cast<DType*>(sdata_raw); // Can't directly initialize with template type
+    DType* sdata = reinterpret_cast<DType*>(sdata_raw);
 
     unsigned int tid = threadIdx.x;
 
@@ -56,12 +60,12 @@ __global__ void normalize_vectors_kernel(int n_samples, int n_features, DType* P
 }
 
 /**
- * @brief Sample n_samples random unit vectors from a n_features-dimensional sphere
+ * @brief Sample n_samples random unit vectors from an n_features-dimensional sphere
  * @param[in] stream CUDA stream
  * @param[in] n_samples Number of vectors to generate
  * @param[in] n_features Dimensionality of each vector
  * @param[in] seed Seed for the random number generator
- * @param[out] P n_samples x n_features matrix of random unit vectors
+ * @param[out] P Device pointer to n_samples x n_features array of random unit vectors
  */
 template <typename DType>
 void generate_random_projections(cudaStream_t stream, int n_samples, int n_features, uint64_t seed,
@@ -83,7 +87,7 @@ void generate_random_projections(cudaStream_t stream, int n_samples, int n_featu
     }
 
     // Launch row-wise norm kernel
-    int block_size = std::min(n_features, 256);
+    int block_size = std::min(n_features, BLOCK_SIZE);
     int smem_size = block_size * sizeof(DType);
     normalize_vectors_kernel<DType>
         <<<n_samples, block_size, smem_size, stream>>>(n_samples, n_features, P);
