@@ -7,13 +7,12 @@ namespace culsh {
 
 // Forward declarations
 namespace core {
-struct Index;
 struct Candidates;
 } // namespace core
 
 namespace rplsh {
 
-using Index = core::Index;
+struct Index;
 using Candidates = core::Candidates;
 
 /**

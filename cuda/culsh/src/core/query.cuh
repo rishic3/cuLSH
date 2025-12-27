@@ -4,6 +4,7 @@
 #include "constants.cuh"
 #include "index.cuh"
 #include "utils.cuh"
+#include <cassert>
 #include <cstdint>
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_scan.cuh>
@@ -24,11 +25,13 @@ namespace detail {
  * @param[in] table_start Start index of the table's buckets in all_bucket_signatures
  * @param[in] table_end End index of the table's buckets in all_bucket_signatures
  * @param[in] query_sig Device pointer to query signature
- * @param[in] n_hashes Number of hashes (width of signature)
+ * @param[in] sig_nbytes Signature width in bytes
  * @return Matching bucket index or -1 if no match found
  */
-__device__ int find_bucket_in_table(const int8_t* all_bucket_signatures, int table_start,
-                                    int table_end, const int8_t* query_sig, int n_hashes) {
+static __device__ int find_bucket_in_table(const uint8_t* all_bucket_signatures,
+                                                           int table_start, int table_end,
+                                                           const uint8_t* query_sig,
+                                                           int sig_nbytes) {
 
     if (table_start >= table_end)
         return -1;
@@ -38,11 +41,11 @@ __device__ int find_bucket_in_table(const int8_t* all_bucket_signatures, int tab
     int hi = table_end - 1;
     while (lo <= hi) {
         int mid = lo + (hi - lo) / 2;
-        const int8_t* mid_sig = all_bucket_signatures + static_cast<size_t>(mid) * n_hashes;
+        const uint8_t* mid_sig = all_bucket_signatures + static_cast<size_t>(mid) * sig_nbytes;
 
         // Check if signature matches
         int cmp = 0;
-        for (int i = 0; i < n_hashes && cmp == 0; ++i) {
+        for (int i = 0; i < sig_nbytes && cmp == 0; ++i) {
             cmp = (query_sig[i] > mid_sig[i]) - (query_sig[i] < mid_sig[i]);
         }
 
@@ -65,14 +68,14 @@ __device__ int find_bucket_in_table(const int8_t* all_bucket_signatures, int tab
  * all_bucket_signatures
  * @param[in] n_queries Number of queries
  * @param[in] n_hash_tables Number of hash tables
- * @param[in] n_hashes Number of hashes (width of signature)
+ * @param[in] sig_nbytes Signature width in bytes
  * @param[out] matched_bucket_indices Device pointer to array of matching bucket indices for each
  * (query, table) pair
  */
-__global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
-                                             const int8_t* all_bucket_signatures,
+static __global__ void find_matching_buckets_kernel(const uint8_t* Q_sig,
+                                             const uint8_t* all_bucket_signatures,
                                              const int* table_bucket_offsets, int n_queries,
-                                             int n_hash_tables, int n_hashes,
+                                             int n_hash_tables, int sig_nbytes,
                                              int* matched_bucket_indices) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
@@ -83,8 +86,9 @@ __global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
     int table_idx = idx % n_hash_tables;
 
     // Get pointer to query signature in Q_sig
-    const int8_t* query_sig = Q_sig + static_cast<size_t>(table_idx) * (n_queries * n_hashes) +
-                              static_cast<size_t>(query_idx) * n_hashes;
+    const uint8_t* query_sig =
+        Q_sig + static_cast<size_t>(table_idx) * (static_cast<size_t>(n_queries) * sig_nbytes) +
+        static_cast<size_t>(query_idx) * sig_nbytes;
 
     // Get start and end of table's buckets in all_bucket_signatures
     int table_start = table_bucket_offsets[table_idx];
@@ -92,7 +96,7 @@ __global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
 
     // Look for matching bucket
     int matched_bucket =
-        find_bucket_in_table(all_bucket_signatures, table_start, table_end, query_sig, n_hashes);
+        find_bucket_in_table(all_bucket_signatures, table_start, table_end, query_sig, sig_nbytes);
 
     matched_bucket_indices[idx] = matched_bucket;
 }
@@ -108,7 +112,7 @@ __global__ void find_matching_buckets_kernel(const int8_t* Q_sig,
  * @param[out] candidate_counts Device pointer to array of candidate counts for each (query, table)
  * pair
  */
-__global__ void count_candidates_kernel(const int* bucket_candidate_offsets,
+static __global__ void count_candidates_kernel(const int* bucket_candidate_offsets,
                                         const int* matched_bucket_indices, int n_queries,
                                         int n_hash_tables, int* candidate_counts) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -135,7 +139,7 @@ __global__ void count_candidates_kernel(const int* bucket_candidate_offsets,
  * @param[in] n_hash_tables Number of hash tables
  * @param[out] query_candidate_counts Device pointer to array of candidate counts for each query
  */
-__global__ void aggregate_query_results_kernel(const int* candidate_counts, int n_queries,
+static __global__ void aggregate_query_results_kernel(const int* candidate_counts, int n_queries,
                                                int n_hash_tables, size_t* query_candidate_counts) {
     int query_id = static_cast<int>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (query_id >= n_queries)
@@ -160,7 +164,8 @@ __global__ void aggregate_query_results_kernel(const int* candidate_counts, int 
  * @param[out] table_prefix_offsets Device pointer to array of offsets for each table's candidates
  * for each query
  */
-__global__ void compute_table_prefix_offsets_kernel(const int* candidate_counts, int n_queries,
+static __global__ void compute_table_prefix_offsets_kernel(const int* candidate_counts,
+                                                    int n_queries,
                                                     int n_hash_tables,
                                                     size_t* table_prefix_offsets) {
     int query_id = static_cast<int>(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -191,7 +196,7 @@ __global__ void compute_table_prefix_offsets_kernel(const int* candidate_counts,
  * @param[in] n_hash_tables Number of hash tables
  * @param[out] output_candidates Device pointer to array of collected candidates
  */
-__global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
+static __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
                                           const int* all_candidate_indices,
                                           const int* matched_bucket_indices,
                                           const size_t* query_candidate_offsets,
@@ -236,7 +241,7 @@ __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
  * @param[in] n_items Number of items
  * @param[out] flags Device pointer to array of flags
  */
-__global__ void mark_unique_kernel(const int* sorted_candidates, size_t n_items, int* flags) {
+static __global__ void mark_unique_kernel(const int* sorted_candidates, size_t n_items, int* flags) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_items)
         return;
@@ -256,7 +261,7 @@ __global__ void mark_unique_kernel(const int* sorted_candidates, size_t n_items,
  * @param[in] n_queries Number of queries
  * @param[out] flags Device pointer to array of flags
  */
-__global__ void fix_boundaries_kernel(const size_t* offsets, int n_queries, int* flags) {
+static __global__ void fix_boundaries_kernel(const size_t* offsets, int n_queries, int* flags) {
     int idx = static_cast<int>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_queries)
         return;
@@ -276,13 +281,13 @@ __global__ void fix_boundaries_kernel(const size_t* offsets, int n_queries, int*
  * @param[in] d_matched_bucket_indices Device pointer of shape [n_queries * n_hash_tables] laid out
  *            pair-major: i.e., d_matched_bucket_indices[q * n_hash_tables + t] = bucket_id (or -1)
  * @param[in] n_queries Number of queries
- * @param[in] n_hash_tables Number of hash tables
  * @param[in] index Device index
  * @return Candidates object
  */
 inline Candidates query_from_matched_buckets(cudaStream_t stream,
                                              const int* d_matched_bucket_indices, int n_queries,
-                                             int n_hash_tables, const Index* index) {
+                                             const Index* index) {
+    int n_hash_tables = index->n_hash_tables;
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
     dim3 block_size(BLOCK_SIZE);
     dim3 grid_size_items((n_items + block_size.x - 1) / block_size.x);
@@ -471,16 +476,20 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
 /**
  * @brief Query LSH index to find candidates
  * @param[in] stream CUDA stream
- * @param[in] Q_sig Device pointer to query signature matrix (n_queries x n_hash_tables *
- * n_hashes)
+ * @param[in] Q_sig Device pointer to signature matrix (n_hash_tables x n_queries x sig_nbytes)
  * @param[in] n_queries Number of input rows
- * @param[in] n_hash_tables Number of hash tables
- * @param[in] n_hashes Number of hashes per table
+ * @param[in] sig_nbytes Signature width in bytes
  * @param[in] index Device index
  * @return Candidates object
  */
-Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, int n_hash_tables,
-                       int n_hashes, const Index* index) {
+inline Candidates query_index(cudaStream_t stream, const void* Q_sig, int n_queries, int sig_nbytes,
+                              const Index* index) {
+    assert(sig_nbytes > 0 && "sig_nbytes must be > 0");
+    assert(index != nullptr && "index must be non-null");
+    assert(index->sig_nbytes == sig_nbytes && "sig_nbytes != index->sig_nbytes");
+    const uint8_t* Q_sig_bytes = static_cast<const uint8_t*>(Q_sig);
+
+    int n_hash_tables = index->n_hash_tables;
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
     dim3 block_size(BLOCK_SIZE);
     dim3 grid_size_items((n_items + block_size.x - 1) / block_size.x);
@@ -497,11 +506,11 @@ Candidates query_index(cudaStream_t stream, const int8_t* Q_sig, int n_queries, 
 
     // Find matching buckets for each (query, table)
     find_matching_buckets_kernel<<<grid_size_items, block_size, 0, stream>>>(
-        Q_sig, index->all_bucket_signatures, index->table_bucket_offsets, n_queries, n_hash_tables,
-        n_hashes, d_matched_bucket_indices);
+        Q_sig_bytes, index->all_bucket_signatures, index->table_bucket_offsets, n_queries,
+        n_hash_tables, sig_nbytes, d_matched_bucket_indices);
 
-    Candidates candidates = query_from_matched_buckets(stream, d_matched_bucket_indices, n_queries,
-                                                       n_hash_tables, index);
+    Candidates candidates =
+        query_from_matched_buckets(stream, d_matched_bucket_indices, n_queries, index);
     CUDA_CHECK(cudaFree(d_matched_bucket_indices));
 
     return candidates;

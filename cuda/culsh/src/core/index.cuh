@@ -2,13 +2,12 @@
 
 #include <cstdint>
 #include <cuda_runtime.h>
-#include <stdexcept>
 
 namespace culsh {
 namespace core {
 
 /**
- * @brief GPU LSH index
+ * @brief Core LSH index
  */
 struct Index {
     /**
@@ -21,9 +20,10 @@ struct Index {
     /**
      * @brief Device pointer to flat sorted array of all bucket signatures for each hash tables.
      * Bucket signatures for each hash table stored contiguously starting at table_start_indices[i].
-     * Size: [n_total_buckets * n_hashes]
+     * Signatures are stored as opaque bytes, where signature size is given by sig_nbytes.
+     * Size: [n_total_buckets * sig_nbytes]
      */
-    int8_t* all_bucket_signatures = nullptr;
+    uint8_t* all_bucket_signatures = nullptr;
 
     /**
      * @brief Start idx of each bucket's candidate indices in all_candidate_indices.
@@ -38,31 +38,23 @@ struct Index {
     int* table_bucket_offsets = nullptr;
 
     /**
-     * @brief Random projection matrix used to hash input.
-     * Either float or double based on is_double flag.
-     * Size: [n_hash_tables * n_hashes * n_features]
-     */
-    void* P = nullptr;
-
-    /**
      * @brief Metadata
      */
     int n_total_candidates = 0;
     int n_total_buckets = 0;
     int n_hash_tables = 0;
     int n_hashes = 0;
+    int sig_nbytes = 0;
     int n_features = 0;
     uint64_t seed = 0;
-    bool is_double = false;
 
     /**
      * @brief Default constructor
      */
     Index()
         : all_candidate_indices(nullptr), all_bucket_signatures(nullptr),
-          bucket_candidate_offsets(nullptr), table_bucket_offsets(nullptr), P(nullptr),
-          n_total_candidates(0), n_total_buckets(0), n_hash_tables(0), n_hashes(0), n_features(0),
-          seed(0), is_double(false) {}
+          bucket_candidate_offsets(nullptr), table_bucket_offsets(nullptr), n_total_candidates(0),
+          n_total_buckets(0), n_hash_tables(0), n_hashes(0), sig_nbytes(0), n_features(0), seed(0) {}
 
     /**
      * @brief Destructor
@@ -76,24 +68,23 @@ struct Index {
         : all_candidate_indices(other.all_candidate_indices),
           all_bucket_signatures(other.all_bucket_signatures),
           bucket_candidate_offsets(other.bucket_candidate_offsets),
-          table_bucket_offsets(other.table_bucket_offsets), P(other.P),
+          table_bucket_offsets(other.table_bucket_offsets),
           n_total_candidates(other.n_total_candidates), n_total_buckets(other.n_total_buckets),
           n_hash_tables(other.n_hash_tables), n_hashes(other.n_hashes),
-          n_features(other.n_features), seed(other.seed), is_double(other.is_double) {
+          sig_nbytes(other.sig_nbytes), n_features(other.n_features), seed(other.seed) {
 
         // nullify moved-from object to prevent double-free
         other.all_candidate_indices = nullptr;
         other.all_bucket_signatures = nullptr;
         other.bucket_candidate_offsets = nullptr;
         other.table_bucket_offsets = nullptr;
-        other.P = nullptr;
         other.n_total_candidates = 0;
         other.n_total_buckets = 0;
         other.n_hash_tables = 0;
         other.n_hashes = 0;
+        other.sig_nbytes = 0;
         other.n_features = 0;
         other.seed = 0;
-        other.is_double = false;
     }
 
     /**
@@ -107,28 +98,26 @@ struct Index {
             all_bucket_signatures = other.all_bucket_signatures;
             bucket_candidate_offsets = other.bucket_candidate_offsets;
             table_bucket_offsets = other.table_bucket_offsets;
-            P = other.P;
             n_total_candidates = other.n_total_candidates;
             n_total_buckets = other.n_total_buckets;
             n_hash_tables = other.n_hash_tables;
             n_hashes = other.n_hashes;
+            sig_nbytes = other.sig_nbytes;
             n_features = other.n_features;
             seed = other.seed;
-            is_double = other.is_double;
 
             // nullify moved-from object to prevent double-free
             other.all_candidate_indices = nullptr;
             other.all_bucket_signatures = nullptr;
             other.bucket_candidate_offsets = nullptr;
             other.table_bucket_offsets = nullptr;
-            other.P = nullptr;
             other.n_total_candidates = 0;
             other.n_total_buckets = 0;
             other.n_hash_tables = 0;
             other.n_hashes = 0;
+            other.sig_nbytes = 0;
             other.n_features = 0;
             other.seed = 0;
-            other.is_double = false;
         }
         return *this;
     }
@@ -148,8 +137,7 @@ struct Index {
      */
     bool empty() const {
         return all_candidate_indices == nullptr && all_bucket_signatures == nullptr &&
-               bucket_candidate_offsets == nullptr && table_bucket_offsets == nullptr &&
-               P == nullptr;
+               bucket_candidate_offsets == nullptr && table_bucket_offsets == nullptr;
     }
 
     /**
@@ -166,12 +154,10 @@ struct Index {
         // table_bucket_offsets
         total_size_bytes += (n_hash_tables + 1) * sizeof(int);
         // all_bucket_signatures
-        total_size_bytes += n_total_buckets * n_hashes * sizeof(int8_t);
+        total_size_bytes += static_cast<size_t>(n_total_buckets) * static_cast<size_t>(sig_nbytes) *
+                            sizeof(uint8_t);
         // all_candidate_indices
         total_size_bytes += n_total_candidates * sizeof(int);
-        // projection matrix P
-        size_t P_elements = static_cast<size_t>(n_hash_tables) * n_hashes * n_features;
-        total_size_bytes += P_elements * (is_double ? sizeof(double) : sizeof(float));
 
         return total_size_bytes;
     }
@@ -196,39 +182,13 @@ struct Index {
             cudaFree(table_bucket_offsets);
             table_bucket_offsets = nullptr;
         }
-        if (P) {
-            cudaFree(P);
-            P = nullptr;
-        }
         n_total_candidates = 0;
         n_total_buckets = 0;
         n_hash_tables = 0;
         n_hashes = 0;
+        sig_nbytes = 0;
         n_features = 0;
         seed = 0;
-        is_double = false;
-    }
-
-    /**
-     * @brief Get projection matrix as float pointer
-     * @throws std::invalid_argument if is_double
-     */
-    float* P_float() const {
-        if (is_double) {
-            throw std::invalid_argument("Projection matrix is not float precision");
-        }
-        return static_cast<float*>(P);
-    }
-
-    /**
-     * @brief Get projection matrix as double pointer
-     * @throws std::invalid_argument if !is_double
-     */
-    double* P_double() const {
-        if (!is_double) {
-            throw std::invalid_argument("Projection matrix is not double precision");
-        }
-        return static_cast<double*>(P);
     }
 };
 

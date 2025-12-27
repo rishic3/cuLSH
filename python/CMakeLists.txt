@@ -41,6 +41,7 @@ set(CUDA_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cuda")
 pybind11_add_module(_culsh_core
     src/bindings.cu
     ${CUDA_LIB_DIR}/culsh/src/rplsh/rplsh.cu
+    ${CUDA_LIB_DIR}/culsh/src/minhash/minhash.cu
 )
 
 # Include directories

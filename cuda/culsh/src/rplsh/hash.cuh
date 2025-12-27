@@ -16,7 +16,7 @@ namespace detail {
  */
 template <typename DType>
 __global__ void compute_signatures_kernel(const DType* X_hash, int n_samples, int n_hash_tables,
-                                          int n_hashes, int8_t* X_sig) {
+                                          int n_hashes, uint8_t* X_sig) {
 
     // each thread computes one signature
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -37,7 +37,7 @@ __global__ void compute_signatures_kernel(const DType* X_hash, int n_samples, in
 
     // Convert to binary
     // Reinterpret as uint32, shift to sign bit, and invert (1 is pos, 0 is neg)
-    X_sig[sig_idx] = (__float_as_uint(X_hash[hash_idx]) >> 31) ^ 1;
+    X_sig[sig_idx] = static_cast<uint8_t>((__float_as_uint(X_hash[hash_idx]) >> 31) ^ 1);
 }
 
 /**
@@ -51,7 +51,7 @@ __global__ void compute_signatures_kernel(const DType* X_hash, int n_samples, in
  */
 template <typename DType>
 void compute_signatures(cudaStream_t stream, const DType* X_hash, int n_samples, int n_hash_tables,
-                        int n_hashes, int8_t* X_sig) {
+                        int n_hashes, uint8_t* X_sig) {
     dim3 block_size(core::BLOCK_SIZE);
     size_t total_elements = static_cast<size_t>(n_samples) * n_hash_tables * n_hashes;
     dim3 grid_size((total_elements + block_size.x - 1) / block_size.x);

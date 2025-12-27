@@ -5,6 +5,7 @@
 #include <culsh/rplsh/rplsh.hpp>
 #include <core/candidates.cuh>
 #include <core/index.cuh>
+#include <rplsh/index.cuh>
 
 #include <optional>
 #include <pybind11/stl.h>
@@ -191,12 +192,13 @@ PYBIND11_MODULE(_culsh_core, m) {
     py::class_<Index, std::unique_ptr<Index>>(m, "Index")
         .def("empty", &Index::empty)
         .def("size_bytes", &Index::size_bytes)
-        .def_readonly("n_total_candidates", &Index::n_total_candidates)
-        .def_readonly("n_total_buckets", &Index::n_total_buckets)
-        .def_readonly("n_hash_tables", &Index::n_hash_tables)
-        .def_readonly("n_hashes", &Index::n_hashes)
-        .def_readonly("n_features", &Index::n_features)
-        .def_readonly("seed", &Index::seed)
+        .def_property_readonly("n_total_candidates", [](const Index& idx) { return idx.core.n_total_candidates; })
+        .def_property_readonly("n_total_buckets", [](const Index& idx) { return idx.core.n_total_buckets; })
+        .def_property_readonly("n_hash_tables", [](const Index& idx) { return idx.core.n_hash_tables; })
+        .def_property_readonly("n_hashes", [](const Index& idx) { return idx.core.n_hashes; })
+        .def_property_readonly("sig_nbytes", [](const Index& idx) { return idx.core.sig_nbytes; })
+        .def_property_readonly("n_features", [](const Index& idx) { return idx.core.n_features; })
+        .def_property_readonly("seed", [](const Index& idx) { return idx.core.seed; })
         .def_readonly("is_double", &Index::is_double);
 
     py::class_<Candidates, std::unique_ptr<Candidates>>(m, "Candidates")

@@ -3,6 +3,7 @@
 #include "constants.cuh"
 #include "index.cuh"
 #include "utils.cuh"
+#include <cassert>
 #include <cstdint>
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_scan.cuh>
@@ -17,16 +18,16 @@ namespace detail {
 
 /**
  * @brief Extract n-th byte of signature for radix sort
- * @param[in] X_sig Device pointer to signature matrix
+ * @param[in] X_sig Device pointer to signature matrix (n_hash_tables x n_samples x sig_nbytes)
  * @param[in] item_indices Device pointer to array of item indices
  * @param[in] n_samples Number of input rows
  * @param[in] n_hash_tables Number of hash tables
- * @param[in] n_hashes Number of hashes per table
+ * @param[in] sig_nbytes Signature width in bytes
  * @param[in] byte_idx Index of byte to extract
  * @param[out] d_keys Device pointer to array of keys
  */
-__global__ void extract_byte_key_kernel(const int8_t* X_sig, const uint32_t* item_indices,
-                                        int n_samples, int n_hash_tables, int n_hashes,
+static __global__ void extract_byte_key_kernel(const uint8_t* X_sig, const uint32_t* item_indices,
+                                        int n_samples, int n_hash_tables, int sig_nbytes,
                                         int byte_idx, uint8_t* d_keys) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
@@ -40,8 +41,9 @@ __global__ void extract_byte_key_kernel(const int8_t* X_sig, const uint32_t* ite
     uint32_t row_id = original_item_idx % n_samples;
 
     // Get pointer to original signature in X_sig
-    const int8_t* sig_ptr =
-        X_sig + table_id * (static_cast<size_t>(n_samples) * n_hashes) + row_id * n_hashes;
+    const uint8_t* sig_ptr =
+        X_sig + static_cast<size_t>(table_id) * (static_cast<size_t>(n_samples) * sig_nbytes) +
+        static_cast<size_t>(row_id) * sig_nbytes;
 
     d_keys[idx] = static_cast<uint8_t>(sig_ptr[byte_idx]);
 }
@@ -53,7 +55,7 @@ __global__ void extract_byte_key_kernel(const int8_t* X_sig, const uint32_t* ite
  * @param[in] n_items Number of items (n_samples * n_hash_tables)
  * @param[out] d_keys Device pointer to array of keys
  */
-__global__ void extract_table_id_key_kernel(const uint32_t* item_indices, int n_samples,
+static __global__ void extract_table_id_key_kernel(const uint32_t* item_indices, int n_samples,
                                             size_t n_items, uint8_t* d_keys) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_items)
@@ -67,11 +69,12 @@ __global__ void extract_table_id_key_kernel(const uint32_t* item_indices, int n_
  * @brief Check if two signatures are equal
  * @param[in] sig1 Device pointer to first signature
  * @param[in] sig2 Device pointer to second signature
- * @param[in] n_hashes Number of hashes (signature width)
+ * @param[in] sig_nbytes Signature width in bytes
  * @return True if signatures are equal, false otherwise
  */
-__device__ bool are_signatures_equal(const int8_t* sig1, const int8_t* sig2, int n_hashes) {
-    for (int i = 0; i < n_hashes; ++i) {
+static __device__ bool are_signatures_equal(const uint8_t* sig1,
+                                                            const uint8_t* sig2, int sig_nbytes) {
+    for (int i = 0; i < sig_nbytes; ++i) {
         if (sig1[i] != sig2[i])
             return false;
     }
@@ -80,17 +83,18 @@ __device__ bool are_signatures_equal(const int8_t* sig1, const int8_t* sig2, int
 
 /**
  * @brief Mark first item of each unique bucket and each new table after sort
- * @param[in] X_sig Device pointer to signature matrix
+ * @param[in] X_sig Device pointer to signature matrix (n_hash_tables x n_samples x sig_nbytes)
  * @param[in] sorted_item_indices Device pointer to array of sorted item indices
  * @param[in] n_samples Number of input rows
  * @param[in] n_hash_tables Number of hash tables
- * @param[in] n_hashes Number of hashes per table
+ * @param[in] sig_nbytes Signature width in bytes
  * @param[in] n_items Number of items (n_samples * n_hash_tables)
  * @param[out] d_bucket_flags Device pointer to array of bucket flags
  * @param[out] d_table_flags Device pointer to array of table flags
  */
-__global__ void mark_boundaries_kernel(const int8_t* X_sig, const uint32_t* sorted_item_indices,
-                                       int n_samples, int n_hash_tables, int n_hashes,
+static __global__ void mark_boundaries_kernel(const uint8_t* X_sig,
+                                       const uint32_t* sorted_item_indices,
+                                       int n_samples, int n_hash_tables, int sig_nbytes,
                                        size_t n_items, int* d_bucket_flags, int* d_table_flags) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_items)
@@ -119,14 +123,16 @@ __global__ void mark_boundaries_kernel(const int8_t* X_sig, const uint32_t* sort
         // Check if signature changed from prev to curr
         uint32_t row_id_curr = orig_idx_curr % n_samples;
         uint32_t row_id_prev = orig_idx_prev % n_samples;
-        const int8_t* sig_ptr_curr = X_sig +
-                                     table_id_curr * (static_cast<size_t>(n_samples) * n_hashes) +
-                                     row_id_curr * n_hashes;
-        const int8_t* sig_ptr_prev = X_sig +
-                                     table_id_prev * (static_cast<size_t>(n_samples) * n_hashes) +
-                                     row_id_prev * n_hashes;
+        const uint8_t* sig_ptr_curr =
+            X_sig +
+            static_cast<size_t>(table_id_curr) * (static_cast<size_t>(n_samples) * sig_nbytes) +
+            static_cast<size_t>(row_id_curr) * sig_nbytes;
+        const uint8_t* sig_ptr_prev =
+            X_sig +
+            static_cast<size_t>(table_id_prev) * (static_cast<size_t>(n_samples) * sig_nbytes) +
+            static_cast<size_t>(row_id_prev) * sig_nbytes;
         // If signature changed, mark new bucket
-        signature_changed = !are_signatures_equal(sig_ptr_curr, sig_ptr_prev, n_hashes);
+        signature_changed = !are_signatures_equal(sig_ptr_curr, sig_ptr_prev, sig_nbytes);
     }
 
     d_table_flags[idx] = table_changed;
@@ -135,23 +141,24 @@ __global__ void mark_boundaries_kernel(const int8_t* X_sig, const uint32_t* sort
 
 /**
  * @brief Scatter sorted data into final flat index
- * @param[in] X_sig Device pointer to signature matrix
+ * @param[in] X_sig Device pointer to signature matrix (n_hash_tables x n_samples x sig_nbytes)
  * @param[in] sorted_item_indices Device pointer to array of sorted item indices
  * @param[in] d_bucket_flags Device pointer to array of bucket flags
  * @param[in] d_bucket_scan Device pointer to array of exclusive scan on bucket flags
  * @param[in] n_samples Number of input rows
  * @param[in] n_hash_tables Number of hash tables
- * @param[in] n_hashes Number of hashes per table
+ * @param[in] sig_nbytes Signature width in bytes
  * @param[in] n_items Number of items (n_samples * n_hash_tables)
  * @param[out] d_bucket_signatures Device pointer to array of bucket signatures
  * @param[out] d_bucket_candidate_offsets Device pointer to array of bucket candidate offsets
  * @param[out] d_all_candidates Device pointer to array of all candidate indices
  * @param[out] d_item_to_bucket Optional device pointer containing (row,table) -> bucket_id mapping
  */
-__global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* sorted_item_indices,
+static __global__ void build_final_index_kernel(const uint8_t* X_sig,
+                                         const uint32_t* sorted_item_indices,
                                          const int* d_bucket_flags, const int* d_bucket_scan,
-                                         int n_samples, int n_hash_tables, int n_hashes,
-                                         size_t n_items, int8_t* d_bucket_signatures,
+                                         int n_samples, int n_hash_tables, int sig_nbytes,
+                                         size_t n_items, uint8_t* d_bucket_signatures,
                                          int* d_bucket_candidate_offsets, int* d_all_candidates,
                                          int* d_item_to_bucket) {
 
@@ -185,13 +192,14 @@ __global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* so
 
         // Find src signature address:
         // (X_sig addr) + table_id * (size of table) + row_id * (size of signature)
-        const int8_t* sig_src_ptr =
-            X_sig + table_id * (static_cast<size_t>(n_samples) * n_hashes) + orig_row_id * n_hashes;
+        const uint8_t* sig_src_ptr =
+            X_sig + static_cast<size_t>(table_id) * (static_cast<size_t>(n_samples) * sig_nbytes) +
+            static_cast<size_t>(orig_row_id) * sig_nbytes;
         // Find dst signature address:
         // (d_bucket_signatures addr) + bucket_idx * (size of signature)
-        int8_t* sig_dst_ptr = d_bucket_signatures + static_cast<size_t>(bucket_idx) * n_hashes;
+        uint8_t* sig_dst_ptr = d_bucket_signatures + static_cast<size_t>(bucket_idx) * sig_nbytes;
 
-        for (int i = 0; i < n_hashes; ++i) {
+        for (int i = 0; i < sig_nbytes; ++i) {
             sig_dst_ptr[i] = sig_src_ptr[i];
         }
     }
@@ -200,15 +208,19 @@ __global__ void build_final_index_kernel(const int8_t* X_sig, const uint32_t* so
 /**
  * @brief Fit flat LSH index structure on GPU
  * @param[in] stream CUDA stream
- * @param[in] X_sig Device pointer to signature matrix (n_samples x n_hash_tables * n_hashes)
+ * @param[in] X_sig Device pointer to signature matrix (n_hash_tables x n_samples x sig_nbytes)
  * @param[in] n_samples Number of input rows
  * @param[in] n_hash_tables Number of hash tables
  * @param[in] n_hashes Number of hashes per table
+ * @param[in] sig_nbytes Signature width in bytes
  * @param[out] d_item_to_bucket Optional device pointer containing (table,row) -> bucket_id mapping
  * @return Index object
  */
-Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_hash_tables,
-                int n_hashes, int* d_item_to_bucket = nullptr) {
+inline Index fit_index(cudaStream_t stream, const void* X_sig, int n_samples, int n_hash_tables,
+                       int n_hashes, int sig_nbytes, int* d_item_to_bucket = nullptr) {
+    assert(sig_nbytes > 0 && "sig_nbytes must be > 0");
+    const uint8_t* X_sig_bytes = static_cast<const uint8_t*>(X_sig);
+
     size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
     dim3 block_size(BLOCK_SIZE);
     dim3 grid_size((n_items + block_size.x - 1) / block_size.x);
@@ -247,10 +259,10 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
     ensure_temp_storage(&d_temp_storage, temp_storage_bytes, sort_temp_bytes);
 
     // Sort items lexicographically by signature, from least -> most significant signature byte
-    for (int byte_idx = n_hashes - 1; byte_idx >= 0; --byte_idx) {
+    for (int byte_idx = sig_nbytes - 1; byte_idx >= 0; --byte_idx) {
         // Extract nth byte for each item from corresponding signature in X_sig
         extract_byte_key_kernel<<<grid_size, block_size, 0, stream>>>(
-            X_sig, d_item_indices, n_samples, n_hash_tables, n_hashes, byte_idx, d_keys);
+            X_sig_bytes, d_item_indices, n_samples, n_hash_tables, sig_nbytes, byte_idx, d_keys);
         cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, d_keys, d_temp_keys,
                                         d_item_indices, d_temp_indices, n_items, 0, 8, stream);
         std::swap(d_item_indices, d_temp_indices);
@@ -267,9 +279,9 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
     std::swap(d_item_indices, d_temp_indices);
 
     // Mark boundaries between buckets (groups of unique items) and tables
-    mark_boundaries_kernel<<<grid_size, block_size, 0, stream>>>(X_sig, d_item_indices, n_samples,
-                                                                 n_hash_tables, n_hashes, n_items,
-                                                                 d_bucket_flags, d_table_flags);
+    mark_boundaries_kernel<<<grid_size, block_size, 0, stream>>>(
+        X_sig_bytes, d_item_indices, n_samples, n_hash_tables, sig_nbytes, n_items, d_bucket_flags,
+        d_table_flags);
 
     // Free sort buffers
     CUDA_CHECK(cudaFree(d_keys));
@@ -280,6 +292,7 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
     Index index;
     index.n_hash_tables = n_hash_tables;
     index.n_hashes = n_hashes;
+    index.sig_nbytes = sig_nbytes;
     index.n_total_candidates = static_cast<int>(n_items);
     CUDA_CHECK(cudaMalloc(&index.table_bucket_offsets, (n_hash_tables + 1) * sizeof(int)));
 
@@ -327,8 +340,8 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
     CUDA_CHECK(
         cudaMalloc(&index.bucket_candidate_offsets, (index.n_total_buckets + 1) * sizeof(int)));
     // Allocate all_bucket_signatures - signature for all buckets in sorted order
-    CUDA_CHECK(cudaMalloc(&index.all_bucket_signatures,
-                          static_cast<size_t>(index.n_total_buckets) * n_hashes * sizeof(int8_t)));
+    CUDA_CHECK(cudaMalloc(&index.all_bucket_signatures, static_cast<size_t>(index.n_total_buckets) *
+                                                            sig_nbytes * sizeof(uint8_t)));
 
     // Set terminating values in offset arrays
     int n_items_int = static_cast<int>(n_items);
@@ -341,8 +354,8 @@ Index fit_index(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_h
 
     // Scatter sorted data into final flat index
     build_final_index_kernel<<<grid_size, block_size, 0, stream>>>(
-        X_sig, d_item_indices, d_bucket_flags, d_bucket_scan, n_samples, n_hash_tables, n_hashes,
-        n_items, index.all_bucket_signatures, index.bucket_candidate_offsets,
+        X_sig_bytes, d_item_indices, d_bucket_flags, d_bucket_scan, n_samples, n_hash_tables,
+        sig_nbytes, n_items, index.all_bucket_signatures, index.bucket_candidate_offsets,
         index.all_candidate_indices, d_item_to_bucket);
 
     // Cleanup

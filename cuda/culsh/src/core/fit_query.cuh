@@ -5,7 +5,6 @@
 #include "index.cuh"
 #include "query.cuh"
 #include "utils.cuh"
-#include <cstdint>
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_scan.cuh>
 #include <cub/device/device_select.cuh>
@@ -20,14 +19,15 @@ namespace detail {
 /**
  * @brief Fit and query to get all-neighbors candidates
  * @param[in] stream CUDA stream
- * @param[in] X_sig Device pointer to signature matrix (n_samples x n_hash_tables * n_hashes)
+ * @param[in] X_sig Device pointer to signature matrix (n_hash_tables x n_samples x sig_nbytes)
  * @param[in] n_samples Number of input rows
  * @param[in] n_hash_tables Number of hash tables
  * @param[in] n_hashes Number of hashes per table
+ * @param[in] sig_nbytes Signature width in bytes
  * @return Candidates object
  */
-Candidates fit_query(cudaStream_t stream, const int8_t* X_sig, int n_samples, int n_hash_tables,
-                     int n_hashes) {
+inline Candidates fit_query(cudaStream_t stream, const void* X_sig, int n_samples, int n_hash_tables,
+                            int n_hashes, int sig_nbytes) {
     size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
 
     // Fit and query on the input X_sig to get all-neighbors candidates (i.e. X_sig == Q_sig).
@@ -41,11 +41,11 @@ Candidates fit_query(cudaStream_t stream, const int8_t* X_sig, int n_samples, in
     CUDA_CHECK(cudaMalloc(&d_item_to_bucket, n_items * sizeof(int)));
 
     // Build the index and fill d_item_to_bucket during final scatter
-    Index index = fit_index(stream, X_sig, n_samples, n_hash_tables, n_hashes, d_item_to_bucket);
+    Index index =
+        fit_index(stream, X_sig, n_samples, n_hash_tables, n_hashes, sig_nbytes, d_item_to_bucket);
 
     // Query using precomputed bucket IDs
-    Candidates candidates =
-        query_from_matched_buckets(stream, d_item_to_bucket, n_samples, n_hash_tables, &index);
+    Candidates candidates = query_from_matched_buckets(stream, d_item_to_bucket, n_samples, &index);
 
     CUDA_CHECK(cudaFree(d_item_to_bucket));
     index.free();

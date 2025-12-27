@@ -16,6 +16,7 @@ pip install .
 ```bash
 cd python
 pip install -e .
+pip install -r requirements_dev.txt
 
 # If making C++ changes, rebuild .so
 make clean

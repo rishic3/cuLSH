@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <culsh/rplsh/rplsh.hpp>
+#include <rplsh/index.cuh>
 #include <filesystem>
 #include <fstream>
 #include <getopt.h>
