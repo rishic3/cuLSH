@@ -89,6 +89,6 @@ counts = candidates.get_counts()
 For large query sets, use `batch_size` to reduce peak GPU memory:
 
 ```python
-# Process 100 queries at a time, returns single merged Candidates
+# Backend processes queries in batches of 100
 candidates = model.query(Q, batch_size=100)
 ```
