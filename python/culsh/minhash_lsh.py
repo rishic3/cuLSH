@@ -1,20 +1,21 @@
 """
-Random Projection LSH
+MinHash LSH
 """
 
-from typing import Optional, Union
+from typing import Union
 
-import cupy as cp
+import cupyx.scipy.sparse
 import numpy as np
+import scipy.sparse
 
-from culsh._culsh_core import Candidates, RPLSHCore, RPLSHIndex
+from culsh._culsh_core import Candidates, MinHashCore, MinHashIndex
 from culsh.utils import ensure_device_array, get_array_info
 
 
-class RPLSH:
+class MinHashLSH:
     """
-    Locality sensitive hashing using random projections. This approximates cosine distance
-    between vectors for ANN search.
+    Locality sensitive hashing using min-wise independent permutations. This approximates
+    Jaccard similarity between sets for ANN search.
 
     Parameters
     ----------
@@ -25,25 +26,26 @@ class RPLSH:
         in the amplified probability (1-(1-p^r)^b). The approximate similarity
         threshold to qualify as a candidate neighbor is (1/b)^(1/r).
     n_hashes : int
-        Number of hashes (random projections) per table (AND-amplification of the
-        locality-sensitive family). More hashes require samples to agree on more hash bits,
-        increasing precision at the cost of more false negatives. Corresponds to 'r' in the
-        amplified probability (1-(1-p^r)^b). The approximate similarity threshold to qualify
-        as a candidate neighbor is (1/b)^(1/r).
+        Number of hash functions per table (AND-amplification of the locality-sensitive family).
+        More hashes require samples to agree on more hash bits, increasing precision
+        at the cost of more false negatives. Corresponds to 'r' in the amplified
+        probability (1-(1-p^r)^b). The approximate similarity threshold to qualify as a
+        candidate neighbor is (1/b)^(1/r).
     seed : int, optional
         Random seed for reproducible hashes. Default is 42.
 
     Examples
     --------
     >>> import numpy as np
-    >>> from culsh import RPLSH
+    >>> import scipy.sparse
+    >>> from culsh import MinHashLSH
     >>>
-    >>> # Create random data
-    >>> X = np.random.randn(10000, 128).astype(np.float32)
-    >>> Q = np.random.randn(100, 128).astype(np.float32)
+    >>> # Create random sparse data
+    >>> X = scipy.sparse.random(10000, 1000, density=0.01, format='csr')
+    >>> Q = scipy.sparse.random(100, 1000, density=0.01, format='csr')
     >>>
     >>> # Fit model
-    >>> lsh = RPLSH(n_hash_tables=16, n_hashes=8)
+    >>> lsh = MinHashLSH(n_hash_tables=16, n_hashes=8)
     >>> model = lsh.fit(X)
     >>>
     >>> # Query for candidates
@@ -75,7 +77,7 @@ class RPLSH:
 
     @property
     def n_hashes(self) -> int:
-        """Number of hashes per hash table."""
+        """Number of hash functions per hash table."""
         return self._n_hashes
 
     @property
@@ -83,35 +85,40 @@ class RPLSH:
         """Random seed."""
         return self._seed
 
-    def fit(self, X: Union[np.ndarray, cp.ndarray]) -> "RPLSHModel":
+    def fit(
+        self, X: Union[scipy.sparse.csr_matrix, cupyx.scipy.sparse.csr_matrix]
+    ) -> "MinHashLSHModel":
         """
-        Fit the RPLSH model on input data.
+        Fit the MinHashLSH model on input data.
 
         Parameters
         ----------
-        X : array-like of shape (n_samples, n_features)
-            Input vectors. Can be numpy or cupy array.
+        X : CSR matrix of shape (n_samples, n_features)
+            Sparse input matrix. Can be scipy or cupyx CSR matrix.
+            Note the matrix is assumed to represent binary set membership
+            (magnitude of data values are ignored).
 
         Returns
         -------
-        RPLSHModel
+        MinHashLSHModel
             The fitted model containing the LSH index.
         """
-        n_samples, n_features, dtype = get_array_info(X)
+        n_samples, n_features, _ = get_array_info(X)
         X = ensure_device_array(X)
 
-        core = RPLSHCore(self._n_hash_tables, self._n_hashes, self._seed)
+        core = MinHashCore(self._n_hash_tables, self._n_hashes, self._seed)
 
-        if dtype == np.float32:
-            index = core.fit_float(X, n_samples, n_features)
-        elif dtype == np.float64:
-            index = core.fit_double(X, n_samples, n_features)
-        else:
-            raise TypeError(
-                f"Unsupported dtype: {dtype}. Supported dtypes are float32, float64."
+        if X.indices.dtype != np.int32:
+            raise ValueError(
+                f"CUDA MinHashLSH requires int32 indices, got {X.indices.dtype}"
             )
 
-        return RPLSHModel(
+        indices = X.indices.astype(np.int32)
+        indptr = X.indptr.astype(np.int32)
+
+        index = core.fit(indices, indptr, n_samples, n_features)
+
+        return MinHashLSHModel(
             n_hash_tables=self._n_hash_tables,
             n_hashes=self._n_hashes,
             n_features=n_features,
@@ -120,7 +127,7 @@ class RPLSH:
         )
 
     def fit_query(
-        self, X: Union[np.ndarray, cp.ndarray], batch_size: Optional[int] = None
+        self, X: Union[scipy.sparse.csr_matrix, cupyx.scipy.sparse.csr_matrix]
     ) -> Candidates:
         """
         Simultaneously fit and query the LSH index. This is more efficient than
@@ -129,51 +136,44 @@ class RPLSH:
 
         Parameters
         ----------
-        X : array-like of shape (n_samples, n_features)
-            Input vectors to fit and query. Can be numpy or cupy array.
-        batch_size : int, optional
-            If specified, falls back to fit() + query() with batching to reduce
-            peak memory usage.
+        X : CSR matrix of shape (n_samples, n_features)
+            Sparse input matrix. Can be scipy or cupyx CSR matrix.
 
         Returns
         -------
         Candidates
             Query results containing candidate indices for each sample.
         """
-        if batch_size is not None:
-            model = self.fit(X)
-            return model.query(X, batch_size=batch_size)
-
-        n_samples, n_features, dtype = get_array_info(X)
+        n_samples, n_features, _ = get_array_info(X)
         X = ensure_device_array(X)
 
-        core = RPLSHCore(self._n_hash_tables, self._n_hashes, self._seed)
-
-        if dtype == np.float32:
-            return core.fit_query_float(X, n_samples, n_features)
-        elif dtype == np.float64:
-            return core.fit_query_double(X, n_samples, n_features)
-        else:
-            raise TypeError(
-                f"Unsupported dtype: {dtype}. Supported dtypes are float32, float64."
+        if X.indices.dtype != np.int32:
+            raise ValueError(
+                f"CUDA MinHashLSH requires int32 indices, got {X.indices.dtype}"
             )
 
+        indices = X.indices.astype(np.int32)
+        indptr = X.indptr.astype(np.int32)
 
-class RPLSHModel:
+        core = MinHashCore(self._n_hash_tables, self._n_hashes, self._seed)
+        return core.fit_query(indices, indptr, n_samples, n_features)
+
+
+class MinHashLSHModel:
     """
-    Model produced by RPLSH.fit() containing the fitted LSH index.
+    Model produced by MinHashLSH.fit() containing the fitted LSH index.
 
     Parameters
     ----------
     n_hash_tables : int
         Number of hash tables.
     n_hashes : int
-        Number of hashes per hash table.
+        Number of hash functions per hash table.
     n_features : int
         Number of features.
-    core : RPLSHCore
-        Core RPLSH object containing the fitted index.
-    index : Index
+    core : MinHashCore
+        Core MinHash object containing the fitted index.
+    index : MinHashIndex
         Fitted index.
     """
 
@@ -182,8 +182,8 @@ class RPLSHModel:
         n_hash_tables: int,
         n_hashes: int,
         n_features: int,
-        core: RPLSHCore,
-        index: RPLSHIndex,
+        core: MinHashCore,
+        index: MinHashIndex,
     ):
         self._n_hash_tables = n_hash_tables
         self._n_hashes = n_hashes
@@ -198,7 +198,7 @@ class RPLSHModel:
 
     @property
     def n_hashes(self) -> int:
-        """Number of hashes per hash table."""
+        """Number of hash functions per hash table."""
         return self._n_hashes
 
     @property
@@ -207,30 +207,27 @@ class RPLSHModel:
         return self._n_features
 
     @property
-    def index(self) -> RPLSHIndex:
+    def index(self) -> MinHashIndex:
         """The fitted index."""
         return self._index
 
     def query(
-        self, Q: Union[np.ndarray, cp.ndarray], batch_size: Optional[int] = None
+        self, Q: Union[scipy.sparse.csr_matrix, cupyx.scipy.sparse.csr_matrix]
     ) -> Candidates:
         """
         Find candidate neighbors for the query vectors Q.
 
         Parameters
         ----------
-        Q : array-like of shape (n_queries, n_features)
-            Query vectors. Can be numpy or cupy array.
-        batch_size : int, optional
-            If specified, process queries in batches of this size to reduce
-            peak memory usage.
+        Q : CSR matrix of shape (n_queries, n_features)
+            Sparse query matrix. Can be scipy or cupyx CSR matrix.
 
         Returns
         -------
         Candidates
             Query results containing candidate indices for each query.
         """
-        n_queries, n_features, dtype = get_array_info(Q)
+        n_queries, n_features, _ = get_array_info(Q)
         Q = ensure_device_array(Q)
 
         if n_features != self._n_features:
@@ -238,9 +235,12 @@ class RPLSHModel:
                 f"Query features ({n_features}) != fitted features ({self._n_features})"
             )
 
-        if dtype == np.float32:
-            return self._core.query_float(Q, n_queries, self._index, batch_size)
-        elif dtype == np.float64:
-            return self._core.query_double(Q, n_queries, self._index, batch_size)
-        else:
-            raise TypeError(f"Unsupported dtype: {dtype}. Use float32 or float64.")
+        if Q.indices.dtype != np.int32:
+            raise ValueError(
+                f"CUDA MinHashLSH requires int32 indices, got {Q.indices.dtype}"
+            )
+
+        indices = Q.indices.astype(np.int32)
+        indptr = Q.indptr.astype(np.int32)
+
+        return self._core.query(indices, indptr, n_queries, self._index)

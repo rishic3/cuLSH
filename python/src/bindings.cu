@@ -1,10 +1,13 @@
 #include "common/array_utils.cuh"
 #include "common/cuda_utils.cuh"
 
+#include <culsh/minhash/minhash.hpp>
+#include <culsh/minhash/params.hpp>
 #include <culsh/rplsh/params.hpp>
 #include <culsh/rplsh/rplsh.hpp>
 #include <core/candidates.cuh>
 #include <core/index.cuh>
+#include <minhash/index.cuh>
 #include <rplsh/index.cuh>
 
 #include <optional>
@@ -107,7 +110,60 @@ class RPLSHCore : public CUDAResourceManager {
     uint64_t seed() const { return seed_; }
 };
 
-py::object get_candidate_indices(const rplsh::Candidates& candidates, bool as_cupy = false) {
+class MinHashCore : public CUDAResourceManager {
+  private:
+    int n_hash_tables_ = 0;
+    int n_hashes_ = 0;
+    uint64_t seed_ = 0;
+
+  public:
+    MinHashCore(int n_hash_tables, int n_hashes, uint64_t seed = 42)
+        : CUDAResourceManager(),
+          n_hash_tables_(n_hash_tables),
+          n_hashes_(n_hashes),
+          seed_(seed) {}
+
+    std::unique_ptr<minhash::Index> fit(py::object indices_obj, py::object indptr_obj,
+                                        int n_samples, int n_features) {
+        int* indices_ptr = get_device_pointer<int>(indices_obj);
+        int* indptr_ptr = get_device_pointer<int>(indptr_obj);
+
+        culsh::MinHashParams params{n_hash_tables_, n_hashes_, seed_};
+        auto index = minhash::fit(stream_, indices_ptr, indptr_ptr, n_samples, n_features, params);
+
+        synchronize();
+        return std::make_unique<minhash::Index>(std::move(index));
+    }
+
+    std::unique_ptr<minhash::Candidates> query(py::object indices_obj, py::object indptr_obj,
+                                               int n_queries, const minhash::Index& index) {
+        int* indices_ptr = get_device_pointer<int>(indices_obj);
+        int* indptr_ptr = get_device_pointer<int>(indptr_obj);
+
+        auto candidates = minhash::query(stream_, indices_ptr, indptr_ptr, n_queries, index);
+
+        synchronize();
+        return std::make_unique<minhash::Candidates>(std::move(candidates));
+    }
+
+    std::unique_ptr<minhash::Candidates> fit_query(py::object indices_obj, py::object indptr_obj,
+                                                   int n_samples, int n_features) {
+        int* indices_ptr = get_device_pointer<int>(indices_obj);
+        int* indptr_ptr = get_device_pointer<int>(indptr_obj);
+
+        culsh::MinHashParams params{n_hash_tables_, n_hashes_, seed_};
+        auto candidates = minhash::fit_query(stream_, indices_ptr, indptr_ptr, n_samples, n_features, params);
+
+        synchronize();
+        return std::make_unique<minhash::Candidates>(std::move(candidates));
+    }
+
+    int n_hash_tables() const { return n_hash_tables_; }
+    int n_hashes() const { return n_hashes_; }
+    uint64_t seed() const { return seed_; }
+};
+
+py::object get_candidate_indices(const core::Candidates& candidates, bool as_cupy = false) {
     size_t n = candidates.n_total_candidates;
 
     if (as_cupy) {
@@ -131,7 +187,7 @@ py::object get_candidate_indices(const rplsh::Candidates& candidates, bool as_cu
     return result;
 }
 
-py::object get_candidate_counts(const rplsh::Candidates& candidates, bool as_cupy = false) {
+py::object get_candidate_counts(const core::Candidates& candidates, bool as_cupy = false) {
     size_t n = candidates.n_queries;
 
     if (as_cupy) {
@@ -155,7 +211,7 @@ py::object get_candidate_counts(const rplsh::Candidates& candidates, bool as_cup
     return result;
 }
 
-py::object get_candidate_offsets(const rplsh::Candidates& candidates, bool as_cupy = false) {
+py::object get_candidate_offsets(const core::Candidates& candidates, bool as_cupy = false) {
     size_t n = candidates.n_queries + 1;
 
     if (as_cupy) {
@@ -187,27 +243,28 @@ PYBIND11_MODULE(_culsh_core, m) {
     m.doc() = "Locality Sensitive Hashing on GPUs";
 
     using namespace culsh::python;
-    using namespace culsh::rplsh;
 
-    py::class_<Index, std::unique_ptr<Index>>(m, "Index")
-        .def("empty", &Index::empty)
-        .def("size_bytes", &Index::size_bytes)
-        .def_property_readonly("n_total_candidates", [](const Index& idx) { return idx.core.n_total_candidates; })
-        .def_property_readonly("n_total_buckets", [](const Index& idx) { return idx.core.n_total_buckets; })
-        .def_property_readonly("n_hash_tables", [](const Index& idx) { return idx.core.n_hash_tables; })
-        .def_property_readonly("n_hashes", [](const Index& idx) { return idx.core.n_hashes; })
-        .def_property_readonly("sig_nbytes", [](const Index& idx) { return idx.core.sig_nbytes; })
-        .def_property_readonly("n_features", [](const Index& idx) { return idx.core.n_features; })
-        .def_property_readonly("seed", [](const Index& idx) { return idx.core.seed; })
-        .def_readonly("is_double", &Index::is_double);
-
-    py::class_<Candidates, std::unique_ptr<Candidates>>(m, "Candidates")
-        .def("empty", &Candidates::empty)
+    // Candidates type
+    py::class_<culsh::core::Candidates, std::unique_ptr<culsh::core::Candidates>>(m, "Candidates")
+        .def("empty", &culsh::core::Candidates::empty)
         .def("get_indices", &get_candidate_indices, py::arg("as_cupy") = false)
         .def("get_counts", &get_candidate_counts, py::arg("as_cupy") = false)
         .def("get_offsets", &get_candidate_offsets, py::arg("as_cupy") = false)
-        .def_readonly("n_queries", &Candidates::n_queries)
-        .def_readonly("n_total_candidates", &Candidates::n_total_candidates);
+        .def_readonly("n_queries", &culsh::core::Candidates::n_queries)
+        .def_readonly("n_total_candidates", &culsh::core::Candidates::n_total_candidates);
+
+    // RPLSH bindings
+    py::class_<culsh::rplsh::Index, std::unique_ptr<culsh::rplsh::Index>>(m, "RPLSHIndex")
+        .def("empty", &culsh::rplsh::Index::empty)
+        .def("size_bytes", &culsh::rplsh::Index::size_bytes)
+        .def_property_readonly("n_total_candidates", [](const culsh::rplsh::Index& idx) { return idx.core.n_total_candidates; })
+        .def_property_readonly("n_total_buckets", [](const culsh::rplsh::Index& idx) { return idx.core.n_total_buckets; })
+        .def_property_readonly("n_hash_tables", [](const culsh::rplsh::Index& idx) { return idx.core.n_hash_tables; })
+        .def_property_readonly("n_hashes", [](const culsh::rplsh::Index& idx) { return idx.core.n_hashes; })
+        .def_property_readonly("sig_nbytes", [](const culsh::rplsh::Index& idx) { return idx.core.sig_nbytes; })
+        .def_property_readonly("n_features", [](const culsh::rplsh::Index& idx) { return idx.core.n_features; })
+        .def_property_readonly("seed", [](const culsh::rplsh::Index& idx) { return idx.core.seed; })
+        .def_readonly("is_double", &culsh::rplsh::Index::is_double);
 
     py::class_<RPLSHCore>(m, "RPLSHCore")
         .def(py::init<int, int, uint64_t>(),
@@ -223,4 +280,27 @@ PYBIND11_MODULE(_culsh_core, m) {
         .def_property_readonly("n_hash_tables", &RPLSHCore::n_hash_tables)
         .def_property_readonly("n_hashes", &RPLSHCore::n_hashes)
         .def_property_readonly("seed", &RPLSHCore::seed);
+
+    // MinHash bindings
+    py::class_<culsh::minhash::Index, std::unique_ptr<culsh::minhash::Index>>(m, "MinHashIndex")
+        .def("empty", &culsh::minhash::Index::empty)
+        .def("size_bytes", &culsh::minhash::Index::size_bytes)
+        .def_property_readonly("n_total_candidates", [](const culsh::minhash::Index& idx) { return idx.core.n_total_candidates; })
+        .def_property_readonly("n_total_buckets", [](const culsh::minhash::Index& idx) { return idx.core.n_total_buckets; })
+        .def_property_readonly("n_hash_tables", [](const culsh::minhash::Index& idx) { return idx.core.n_hash_tables; })
+        .def_property_readonly("n_hashes", [](const culsh::minhash::Index& idx) { return idx.core.n_hashes; })
+        .def_property_readonly("sig_nbytes", [](const culsh::minhash::Index& idx) { return idx.core.sig_nbytes; })
+        .def_property_readonly("n_features", [](const culsh::minhash::Index& idx) { return idx.core.n_features; })
+        .def_property_readonly("seed", [](const culsh::minhash::Index& idx) { return idx.core.seed; });
+
+    py::class_<MinHashCore>(m, "MinHashCore")
+        .def(py::init<int, int, uint64_t>(),
+             py::arg("n_hash_tables"), py::arg("n_hashes"), py::arg("seed") = 42)
+        .def("fit", &MinHashCore::fit)
+        .def("query", &MinHashCore::query,
+             py::arg("indices"), py::arg("indptr"), py::arg("n_queries"), py::arg("index"))
+        .def("fit_query", &MinHashCore::fit_query)
+        .def_property_readonly("n_hash_tables", &MinHashCore::n_hash_tables)
+        .def_property_readonly("n_hashes", &MinHashCore::n_hashes)
+        .def_property_readonly("seed", &MinHashCore::seed);
 }

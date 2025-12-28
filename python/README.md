@@ -26,11 +26,3 @@ The Python layer accepts numpy or cupy arrays (numpy inputs are copied immediate
 The CUDA layer produces containers holding pointers to device memory: `Index` and `Candidates` for fit and query respectively. To manage memory, the CUDA layer implements RAII semantics over these containers, and the Python bindings wrap them in a unique ptr.
 
 The output candidates returns a CSR-like result (indices, offsets) pointing to samples in `X`, the fitted array.
-
-```
-Python (culsh/)          C++ Bindings (src/)           CUDA (../cuda/)
-─────────────────        ───────────────────           ───────────────
-RPLSH, RPLSHModel   →    RPLSHCore (pybind11)     →    rplsh::fit/query
-     ↓                        ↓                             ↓
-numpy/cupy arrays        __cuda_array_interface__      Index, Candidates
-```

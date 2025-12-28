@@ -56,19 +56,5 @@ Candidates query(cudaStream_t stream, const int* Q_indices, const int* Q_indptr,
 Candidates fit_query(cudaStream_t stream, const int* X_indices, const int* X_indptr, int n_samples,
                      int n_features, const MinHashParams& params);
 
-/**
- * @brief Query the MinHash LSH index in batches
- *
- * @param[in] stream CUDA stream
- * @param[in] Q_indices Indices for query CSR matrix (nnz)
- * @param[in] Q_indptr Indptr for query CSR matrix (n_queries + 1)
- * @param[in] n_queries Number of query points
- * @param[in] index MinHash LSH index (contains projection matrix)
- * @param[in] batch_size Number of queries per batch
- * @return Candidates containing candidate indices for each query
- */
-Candidates query_batched(cudaStream_t stream, const int* Q_indices, const int* Q_indptr,
-                         int n_queries, const Index& index, int batch_size);
-
 } // namespace minhash
 } // namespace culsh
