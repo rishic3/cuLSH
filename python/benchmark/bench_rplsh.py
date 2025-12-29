@@ -39,9 +39,7 @@ class RPLSHBenchmark(LSHBenchmark):
             seed=self.args.seed,
         )
 
-    def get_ground_truth_top_k(
-        self, X_train, Q_test, query_idx: int, k: int
-    ) -> np.ndarray:
+    def get_ground_truth_top_k(self, X_train, Q_test, query_idx: int, k: int):
         """Get top-k by cosine similarity."""
         q = Q_test[query_idx]
         q_norm = q / np.linalg.norm(q)

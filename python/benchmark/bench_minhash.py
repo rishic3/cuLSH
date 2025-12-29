@@ -184,30 +184,19 @@ class MinHashBenchmark(LSHBenchmark):
         """MinHash doesn't support batch_size in query."""
         return model.query(data)
 
-    def get_ground_truth_top_k(
-        self, X_train, Q_test, query_idx: int, k: int
-    ) -> np.ndarray:
-        """Get top-k by Jaccard similarity."""
-        q = Q_test[query_idx]
+    def get_ground_truth_top_k(self, X_train, Q_test, query_idx: int, k: int):
+        """Get top-k by Jaccard similarity (vectorized)."""
+        q = Q_test.getrow(query_idx)
 
-        # Compute Jaccard similarity between query and all training samples
-        # Jaccard(A, B) = |A ∩ B| / |A ∪ B|
-        jaccard_sims = np.zeros(X_train.shape[0])
-
-        q_indices = set(q.indices)
-        q_nnz = len(q_indices)
-
-        for i in range(X_train.shape[0]):
-            x_row = X_train.getrow(i)
-            x_indices = set(x_row.indices)
-            x_nnz = len(x_indices)
-
-            intersection = len(q_indices & x_indices)
-            union = q_nnz + x_nnz - intersection
-
-            if union > 0:
-                jaccard_sims[i] = intersection / union
-
+        # Compute intersection via dot product X @ q.T
+        intersections = X_train.dot(q.T).toarray().ravel()
+        # Compute row-wise nnz
+        x_nnz = np.diff(X_train.indptr)
+        q_nnz = q.nnz
+        # Union = |A| + |B| - |A ∩ B|
+        unions = x_nnz + q_nnz - intersections
+        # Jaccard = intersection / union
+        jaccard_sims = np.where(unions > 0, intersections / unions, 0.0)
         return np.argsort(jaccard_sims)[-k:][::-1]
 
 

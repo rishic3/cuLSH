@@ -53,18 +53,16 @@ class LSHBenchmark(ABC):
         pass
 
     @abstractmethod
-    def get_ground_truth_top_k(
-        self, X_train, Q_test, query_idx: int, k: int
-    ) -> np.ndarray:
+    def get_ground_truth_top_k(self, X_train, Q_test, query_idx: int, k: int) -> Any:
         """
         Get ground truth top-k indices for a query.
 
         Parameters
         ----------
         X_train : array-like of shape (n_samples, n_features)
-            Training data
+            Training data (numpy or cupy array)
         Q_test : array-like of shape (n_queries, n_features)
-            Query data
+            Query data (numpy or cupy array)
         query_idx : int
             Index of the query in Q_test
         k : int
@@ -72,26 +70,20 @@ class LSHBenchmark(ABC):
 
         Returns
         -------
-        np.ndarray
+        np.ndarray or cp.ndarray
             Indices of top-k ground truth neighbors
         """
         pass
 
     def _call_fit_query(self, lsh: Any, data: Any) -> Any:
-        """
-        Call fit_query with appropriate arguments.
-        Override if the algorithm doesn't support batch_size.
-        """
+        """Call fit_query with appropriate arguments"""
         assert self.args is not None
         if self.args.batch_size:
             return lsh.fit_query(data, batch_size=self.args.batch_size)
         return lsh.fit_query(data)
 
     def _call_query(self, model: Any, data: Any) -> Any:
-        """
-        Call query with appropriate arguments.
-        Override if the algorithm doesn't support batch_size.
-        """
+        """Call query with appropriate arguments"""
         assert self.args is not None
         if self.args.batch_size:
             return model.query(data, batch_size=self.args.batch_size)
@@ -157,18 +149,24 @@ class LSHBenchmark(ABC):
         self.add_algorithm_args(parser)
         return parser.parse_args()
 
-    def evaluate_recall(self, X_train, Q_test, all_neighbors, recall_k_values):
+    def evaluate_recall(self, X_train, Q_test, candidates, recall_k_values):
         """Evaluate recall@k for the first n_eval_queries queries."""
         assert self.args is not None
 
-        n_eval = min(self.args.n_eval_queries, Q_test.shape[0], len(all_neighbors))
+        n_eval = min(self.args.n_eval_queries, Q_test.shape[0], candidates.n_queries)
+
+        indices = candidates.get_indices()
+        offsets = candidates.get_offsets()
+
         candidate_counts = []
         queries_with_candidates = 0
 
         recall_at_k = {k: [] for k in recall_k_values}
         for i in tqdm(range(n_eval), desc="Evaluating recall", ncols=100):
-            lsh_indices = all_neighbors[i]
-            n_candidates = len(lsh_indices)
+            # Slice candidates for this query
+            start, end = int(offsets[i]), int(offsets[i + 1])
+            lsh_indices = indices[start:end]
+            n_candidates = end - start
             candidate_counts.append(n_candidates)
 
             if n_candidates == 0:
@@ -272,22 +270,20 @@ class LSHBenchmark(ABC):
         )
 
         # Evaluate recall
-        all_neighbors = self.candidates_to_list(candidates)
         n_queries = Q_test.shape[0]
-        if len(all_neighbors) != n_queries:
+        if candidates.n_queries != n_queries:
             logger.warning(
                 "Candidates length does not match number of queries "
-                f"(candidates.n_queries={candidates.n_queries}, "
-                f"len(all_neighbors)={len(all_neighbors)}, n_queries={n_queries})."
+                f"(candidates.n_queries={candidates.n_queries}, n_queries={n_queries})."
             )
 
-        n_eval = min(self.args.n_eval_queries, n_queries, len(all_neighbors))
+        n_eval = min(self.args.n_eval_queries, n_queries, candidates.n_queries)
         if n_eval == 0:
             logger.warning("No queries to evaluate (no candidates returned).")
             return
 
         recall_results = self.evaluate_recall(
-            X_train, Q_test, all_neighbors, recall_k_values
+            X_train, Q_test, candidates, recall_k_values
         )
 
         # Save or print results
@@ -348,24 +344,9 @@ class LSHBenchmark(ABC):
             logger.info("=" * 50)
 
     @staticmethod
-    def candidates_to_list(candidates):
-        """Convert Candidates object to list of arrays (one per query)."""
-        indices = candidates.get_indices()
-        offsets = candidates.get_offsets()
-        n_queries = candidates.n_queries
-
-        result = []
-        for i in range(n_queries):
-            start, end = offsets[i], offsets[i + 1]
-            result.append(indices[start:end])
-        return result
-
-    @staticmethod
     def compute_recall(lsh_indices, gt_indices):
         """Calculate recall score."""
         if len(gt_indices) == 0:
             return 0.0
-        lsh_set = set(lsh_indices)
-        gt_set = set(gt_indices)
-        intersection = lsh_set.intersection(gt_set)
-        return len(intersection) / len(gt_set)
+        intersection = np.intersect1d(lsh_indices, gt_indices)
+        return len(intersection) / len(gt_indices)
