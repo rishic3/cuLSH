@@ -9,9 +9,12 @@ def main():
 
     result = subprocess.run(
         [
-            sys.executable, "-m", "pybind11_stubgen",
+            sys.executable,
+            "-m",
+            "pybind11_stubgen",
             "culsh._culsh_core",
-            "-o", str(output_dir),
+            "-o",
+            str(output_dir),
             "--ignore-all-errors",
         ],
         capture_output=True,
