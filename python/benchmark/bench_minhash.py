@@ -18,7 +18,6 @@ class MinHashBenchmark(LSHBenchmark):
 
     def add_algorithm_args(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
-            "-d",
             "--density",
             type=float,
             default=0.1,
@@ -55,13 +54,10 @@ class MinHashBenchmark(LSHBenchmark):
 
     def load_data(self, data_dir: Path) -> tuple[Any, Any]:
         """
-        Load sparse data from various formats.
-
-        Supported formats (checked in order):
+        Load sparse data from these formats (checked in order):
         1. base.npz + query.npz - Pre-split sparse matrices
-        2. kosarak.dat - Kosarak transaction format (space-separated item IDs per line)
-        3. *.dat - Generic transaction format
-        4. Synthetic - Generate random sparse data
+        2. *.dat - Kosarak transaction format (space-separated item IDs per line)
+        3. Synthetic - Generate random sparse data
         """
         assert self.args is not None
 
@@ -72,14 +68,9 @@ class MinHashBenchmark(LSHBenchmark):
             logger.info("Loading pre-split .npz files...")
             X = scipy.sparse.load_npz(base_npz)
             Q = scipy.sparse.load_npz(query_npz)
-            return self._ensure_int32(X), self._ensure_int32(Q)
+            return X, Q
 
-        # Check for Kosarak or other .dat files
-        kosarak_dat = data_dir / "kosarak.dat"
-        if kosarak_dat.exists():
-            return self._load_transaction_file(kosarak_dat)
-
-        # Check for any .dat file
+        # Check for .dat file
         dat_files = list(data_dir.glob("*.dat"))
         if dat_files:
             return self._load_transaction_file(dat_files[0])
@@ -90,7 +81,6 @@ class MinHashBenchmark(LSHBenchmark):
     def _load_transaction_file(self, filepath: Path) -> tuple[Any, Any]:
         """
         Load transaction data from a .dat file.
-
         Format: each line is a space-separated list of item IDs (integers).
         Each line represents a set/transaction.
         """
@@ -147,7 +137,7 @@ class MinHashBenchmark(LSHBenchmark):
 
         logger.info(f"Split: {X.shape[0]} training, {Q.shape[0]} queries")
 
-        return self._ensure_int32(X), self._ensure_int32(Q)
+        return X, Q
 
     def _generate_synthetic_data(self) -> tuple[Any, Any]:
         """Generate synthetic random sparse data."""
@@ -176,33 +166,7 @@ class MinHashBenchmark(LSHBenchmark):
         )
         Q.data[:] = 1.0
 
-        return self._ensure_int32(X), self._ensure_int32(Q)
-
-    @staticmethod
-    def _ensure_int32(matrix: scipy.sparse.csr_matrix) -> scipy.sparse.csr_matrix:
-        """Ensure CSR matrix has int32 indices for CUDA."""
-        INT32_MAX = np.iinfo(np.int32).max
-
-        # Check indices (column indices) fit in int32
-        if matrix.indices.size > 0 and matrix.indices.max() > INT32_MAX:
-            raise ValueError(
-                f"Matrix has column indices > int32 max ({matrix.indices.max()} > {INT32_MAX}). "
-                f"Dataset too large for CUDA MinHash."
-            )
-
-        # Check indptr (row pointers) fit in int32
-        if matrix.indptr.max() > INT32_MAX:
-            raise ValueError(
-                f"Matrix has indptr values > int32 max ({matrix.indptr.max()} > {INT32_MAX}). "
-                f"Dataset too large for CUDA MinHash."
-            )
-
-        matrix = matrix.astype(np.float32)
-        if matrix.indices.dtype != np.int32:
-            matrix.indices = matrix.indices.astype(np.int32)
-        if matrix.indptr.dtype != np.int32:
-            matrix.indptr = matrix.indptr.astype(np.int32)
-        return matrix
+        return X, Q
 
     def create_lsh(self) -> MinHashLSH:
         assert self.args is not None
