@@ -1,5 +1,6 @@
 -r requirements.txt
 pybind11
+pybind11-stubgen
 pytest
 isort
 black

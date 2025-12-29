@@ -6,7 +6,7 @@ CUDA_HOST_COMPILER = g++-12
 PYTHON = python3
 OUTPUT_DIR = $(shell pwd)/culsh
 
-.PHONY: all clean release debug help
+.PHONY: all clean release debug stubs help
 
 all: release
 
@@ -14,7 +14,11 @@ help:
 	@echo "Available targets:"
 	@echo "  release     - Build the extension in Release mode (default)"
 	@echo "  debug       - Build the extension in Debug mode"
+	@echo "  stubs       - Generate .pyi type stubs for the extension"
 	@echo "  clean       - Remove build directories"
+
+stubs:
+	@$(PYTHON) scripts/generate_stubs.py
 
 release: $(BUILD_DIR_RELEASE)/Makefile
 	@cd $(BUILD_DIR_RELEASE) && $(MAKE) -j$(shell nproc)

@@ -75,7 +75,7 @@ class RPLSH:
 
     @property
     def n_hashes(self) -> int:
-        """Number of hashes per hash table."""
+        """Number of hash functions per hash table."""
         return self._n_hashes
 
     @property
