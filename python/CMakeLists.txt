@@ -39,7 +39,7 @@ set(CUDA_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cuda")
 
 # Build the pybind11 module
 pybind11_add_module(_culsh_core
-    src/bindings.cu
+    csrc/bindings.cu
     ${CUDA_LIB_DIR}/culsh/src/rplsh/rplsh.cu
     ${CUDA_LIB_DIR}/culsh/src/minhash/minhash.cu
 )
@@ -69,4 +69,3 @@ set_target_properties(_culsh_core PROPERTIES
 target_compile_options(_culsh_core PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:-O3 --expt-relaxed-constexpr>
 )
-
