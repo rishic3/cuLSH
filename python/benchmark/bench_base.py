@@ -10,6 +10,8 @@ from typing import Any
 import numpy as np
 from tqdm import tqdm
 
+from culsh.utils import compute_recall
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s: %(message)s",
@@ -180,7 +182,7 @@ class LSHBenchmark(ABC):
             # Compute recall@k for each k
             for k in recall_k_values:
                 gt_indices = self.get_ground_truth_top_k(X_train, Q_test, i, k)
-                recall_score = self.compute_recall(lsh_indices, gt_indices)
+                recall_score = compute_recall(lsh_indices, gt_indices)
                 recall_at_k[k].append(recall_score)
 
             if logger.isEnabledFor(logging.DEBUG):
@@ -342,11 +344,3 @@ class LSHBenchmark(ABC):
             for k, recall in recall_results["recall_at_k"].items():
                 logger.info(f"  recall@{k}: {recall:.4f}")
             logger.info("=" * 50)
-
-    @staticmethod
-    def compute_recall(lsh_indices, gt_indices):
-        """Calculate recall score."""
-        if len(gt_indices) == 0:
-            return 0.0
-        intersection = np.intersect1d(lsh_indices, gt_indices)
-        return len(intersection) / len(gt_indices)

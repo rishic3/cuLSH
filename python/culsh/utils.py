@@ -5,9 +5,9 @@ Utility functions.
 from typing import Union
 
 import cupy as cp
-import cupyx
+import cupyx.scipy.sparse
 import numpy as np
-import scipy
+import scipy.sparse
 
 
 def get_array_info(
@@ -18,6 +18,7 @@ def get_array_info(
     """Get shape and dtype from numpy or cupy array."""
     if arr.ndim != 2:
         raise ValueError(f"Expected 2D array, got {arr.ndim}D")
+    assert arr.shape is not None, "Shape is None"
     return arr.shape[0], arr.shape[1], arr.dtype
 
 
@@ -41,3 +42,11 @@ def ensure_device_array(
         return arr
     else:
         return cp.asarray(arr, order="C")
+
+
+def compute_recall(lsh_indices: np.ndarray, gt_indices: np.ndarray) -> float:
+    """Compute recall score between LSH candidates and ground truth"""
+    if len(gt_indices) == 0:
+        return 0.0
+    intersection = np.intersect1d(lsh_indices, gt_indices)
+    return len(intersection) / len(gt_indices)

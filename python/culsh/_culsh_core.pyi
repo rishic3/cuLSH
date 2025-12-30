@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import typing
 
+import numpy
+import numpy.typing
+
 __all__: list[str] = [
     "Candidates",
     "MinHashCore",
@@ -60,7 +63,29 @@ class MinHashCore:
     def seed(self) -> int: ...
 
 class MinHashIndex:
+    @staticmethod
+    def load(
+        candidate_indices: typing.Annotated[numpy.typing.ArrayLike, numpy.int32],
+        bucket_signatures: typing.Annotated[numpy.typing.ArrayLike, numpy.uint8],
+        bucket_candidate_offsets: typing.Annotated[numpy.typing.ArrayLike, numpy.int32],
+        table_bucket_offsets: typing.Annotated[numpy.typing.ArrayLike, numpy.int32],
+        hash_a: typing.Annotated[numpy.typing.ArrayLike, numpy.uint32],
+        hash_b: typing.Annotated[numpy.typing.ArrayLike, numpy.uint32],
+        n_total_candidates: typing.SupportsInt,
+        n_total_buckets: typing.SupportsInt,
+        n_hash_tables: typing.SupportsInt,
+        n_hashes: typing.SupportsInt,
+        sig_nbytes: typing.SupportsInt,
+        n_features: typing.SupportsInt,
+        seed: typing.SupportsInt,
+    ) -> MinHashIndex: ...
     def empty(self) -> bool: ...
+    def get_bucket_candidate_offsets(self) -> numpy.typing.NDArray[numpy.int32]: ...
+    def get_bucket_signatures(self) -> numpy.typing.NDArray[numpy.uint8]: ...
+    def get_candidate_indices(self) -> numpy.typing.NDArray[numpy.int32]: ...
+    def get_hash_a(self) -> numpy.typing.NDArray[numpy.uint32]: ...
+    def get_hash_b(self) -> numpy.typing.NDArray[numpy.uint32]: ...
+    def get_table_bucket_offsets(self) -> numpy.typing.NDArray[numpy.int32]: ...
     def size_bytes(self) -> int: ...
     @property
     def n_features(self) -> int: ...
@@ -118,7 +143,42 @@ class RPLSHCore:
     def seed(self) -> int: ...
 
 class RPLSHIndex:
+    @staticmethod
+    def load_double(
+        candidate_indices: typing.Annotated[numpy.typing.ArrayLike, numpy.int32],
+        bucket_signatures: typing.Annotated[numpy.typing.ArrayLike, numpy.uint8],
+        bucket_candidate_offsets: typing.Annotated[numpy.typing.ArrayLike, numpy.int32],
+        table_bucket_offsets: typing.Annotated[numpy.typing.ArrayLike, numpy.int32],
+        projection: typing.Annotated[numpy.typing.ArrayLike, numpy.float64],
+        n_total_candidates: typing.SupportsInt,
+        n_total_buckets: typing.SupportsInt,
+        n_hash_tables: typing.SupportsInt,
+        n_hashes: typing.SupportsInt,
+        sig_nbytes: typing.SupportsInt,
+        n_features: typing.SupportsInt,
+        seed: typing.SupportsInt,
+    ) -> RPLSHIndex: ...
+    @staticmethod
+    def load_float(
+        candidate_indices: typing.Annotated[numpy.typing.ArrayLike, numpy.int32],
+        bucket_signatures: typing.Annotated[numpy.typing.ArrayLike, numpy.uint8],
+        bucket_candidate_offsets: typing.Annotated[numpy.typing.ArrayLike, numpy.int32],
+        table_bucket_offsets: typing.Annotated[numpy.typing.ArrayLike, numpy.int32],
+        projection: typing.Annotated[numpy.typing.ArrayLike, numpy.float32],
+        n_total_candidates: typing.SupportsInt,
+        n_total_buckets: typing.SupportsInt,
+        n_hash_tables: typing.SupportsInt,
+        n_hashes: typing.SupportsInt,
+        sig_nbytes: typing.SupportsInt,
+        n_features: typing.SupportsInt,
+        seed: typing.SupportsInt,
+    ) -> RPLSHIndex: ...
     def empty(self) -> bool: ...
+    def get_bucket_candidate_offsets(self) -> numpy.typing.NDArray[numpy.int32]: ...
+    def get_bucket_signatures(self) -> numpy.typing.NDArray[numpy.uint8]: ...
+    def get_candidate_indices(self) -> numpy.typing.NDArray[numpy.int32]: ...
+    def get_projection_matrix(self) -> typing.Any: ...
+    def get_table_bucket_offsets(self) -> numpy.typing.NDArray[numpy.int32]: ...
     def size_bytes(self) -> int: ...
     @property
     def is_double(self) -> bool: ...

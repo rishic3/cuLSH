@@ -244,3 +244,75 @@ class RPLSHModel:
             return self._core.query_double(Q, n_queries, self._index, batch_size)
         else:
             raise TypeError(f"Unsupported dtype: {dtype}. Use float32 or float64.")
+
+    def save(self, path: str) -> None:
+        """
+        Save the RPLSH model to a file.
+
+        Parameters
+        ----------
+        path : str
+            Path to save the model.
+        """
+        np.savez_compressed(
+            path,
+            n_hash_tables=self._n_hash_tables,
+            n_hashes=self._n_hashes,
+            n_features=self._n_features,
+            n_total_candidates=self._index.n_total_candidates,
+            n_total_buckets=self._index.n_total_buckets,
+            seed=self._index.seed,
+            sig_nbytes=self._index.sig_nbytes,
+            is_double=self._index.is_double,
+            candidate_indices=self._index.get_candidate_indices(),
+            bucket_signatures=self._index.get_bucket_signatures(),
+            bucket_candidate_offsets=self._index.get_bucket_candidate_offsets(),
+            table_bucket_offsets=self._index.get_table_bucket_offsets(),
+            projection=self._index.get_projection_matrix(),
+        )
+
+    @classmethod
+    def load(cls, path: str) -> "RPLSHModel":
+        """
+        Load the RPLSH model from a file.
+
+        Parameters
+        ----------
+        path : str
+            Path to load the model from.
+        """
+        data = np.load(path)
+
+        core = RPLSHCore(
+            n_hash_tables=int(data["n_hash_tables"]),
+            n_hashes=int(data["n_hashes"]),
+            seed=int(data["seed"]),
+        )
+
+        index_kwargs = {
+            "candidate_indices": data["candidate_indices"],
+            "bucket_signatures": data["bucket_signatures"],
+            "bucket_candidate_offsets": data["bucket_candidate_offsets"],
+            "table_bucket_offsets": data["table_bucket_offsets"],
+            "projection": data["projection"],
+            "n_total_candidates": int(data["n_total_candidates"]),
+            "n_total_buckets": int(data["n_total_buckets"]),
+            "n_hash_tables": int(data["n_hash_tables"]),
+            "n_hashes": int(data["n_hashes"]),
+            "sig_nbytes": int(data["sig_nbytes"]),
+            "n_features": int(data["n_features"]),
+            "seed": int(data["seed"]),
+        }
+
+        if data["is_double"]:
+            index = RPLSHIndex.load_double(**index_kwargs)
+        else:
+            index = RPLSHIndex.load_float(**index_kwargs)
+
+        return cls(
+            n_hash_tables=int(data["n_hash_tables"]),
+            n_hashes=int(data["n_hashes"]),
+            n_features=int(data["n_features"]),
+            core=core,
+            index=index,
+        )

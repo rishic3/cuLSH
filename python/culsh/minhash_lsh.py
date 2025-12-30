@@ -4,6 +4,7 @@ MinHash LSH
 
 from typing import Union
 
+import cupy as cp
 import cupyx.scipy.sparse
 import numpy as np
 import scipy.sparse
@@ -106,15 +107,8 @@ class MinHashLSH:
         n_samples, n_features, _ = get_array_info(X)
         X = ensure_device_array(X)
 
+        indices, indptr = ensure_int32_indices(X)
         core = MinHashCore(self._n_hash_tables, self._n_hashes, self._seed)
-
-        if X.indices.dtype != np.int32:
-            raise ValueError(
-                f"CUDA MinHashLSH requires int32 indices, got {X.indices.dtype}"
-            )
-
-        indices = X.indices.astype(np.int32)
-        indptr = X.indptr.astype(np.int32)
 
         index = core.fit(indices, indptr, n_samples, n_features)
 
@@ -147,15 +141,9 @@ class MinHashLSH:
         n_samples, n_features, _ = get_array_info(X)
         X = ensure_device_array(X)
 
-        if X.indices.dtype != np.int32:
-            raise ValueError(
-                f"CUDA MinHashLSH requires int32 indices, got {X.indices.dtype}"
-            )
-
-        indices = X.indices.astype(np.int32)
-        indptr = X.indptr.astype(np.int32)
-
+        indices, indptr = ensure_int32_indices(X)
         core = MinHashCore(self._n_hash_tables, self._n_hashes, self._seed)
+
         return core.fit_query(indices, indptr, n_samples, n_features)
 
 
@@ -235,12 +223,88 @@ class MinHashLSHModel:
                 f"Query features ({n_features}) != fitted features ({self._n_features})"
             )
 
-        if Q.indices.dtype != np.int32:
-            raise ValueError(
-                f"CUDA MinHashLSH requires int32 indices, got {Q.indices.dtype}"
-            )
-
-        indices = Q.indices.astype(np.int32)
-        indptr = Q.indptr.astype(np.int32)
+        indices, indptr = ensure_int32_indices(Q)
 
         return self._core.query(indices, indptr, n_queries, self._index)
+
+    def save(self, path: str) -> None:
+        """
+        Save the MinHashLSH model to a file.
+
+        Parameters
+        ----------
+        path : str
+            Path to save the model.
+        """
+        np.savez_compressed(
+            path,
+            n_hash_tables=self._n_hash_tables,
+            n_hashes=self._n_hashes,
+            n_features=self._n_features,
+            n_total_candidates=self._index.n_total_candidates,
+            n_total_buckets=self._index.n_total_buckets,
+            seed=self._index.seed,
+            sig_nbytes=self._index.sig_nbytes,
+            candidate_indices=self._index.get_candidate_indices(),
+            bucket_signatures=self._index.get_bucket_signatures(),
+            bucket_candidate_offsets=self._index.get_bucket_candidate_offsets(),
+            table_bucket_offsets=self._index.get_table_bucket_offsets(),
+            hash_a=self._index.get_hash_a(),
+            hash_b=self._index.get_hash_b(),
+        )
+
+    @classmethod
+    def load(cls, path: str) -> "MinHashLSHModel":
+        """
+        Load the MinHashLSH model from a file.
+
+        Parameters
+        ----------
+        path : str
+            Path to load the model from.
+        """
+        data = np.load(path)
+
+        core = MinHashCore(
+            n_hash_tables=int(data["n_hash_tables"]),
+            n_hashes=int(data["n_hashes"]),
+            seed=int(data["seed"]),
+        )
+
+        index = MinHashIndex.load(
+            candidate_indices=data["candidate_indices"],
+            bucket_signatures=data["bucket_signatures"],
+            bucket_candidate_offsets=data["bucket_candidate_offsets"],
+            table_bucket_offsets=data["table_bucket_offsets"],
+            hash_a=data["hash_a"],
+            hash_b=data["hash_b"],
+            n_total_candidates=int(data["n_total_candidates"]),
+            n_total_buckets=int(data["n_total_buckets"]),
+            n_hash_tables=int(data["n_hash_tables"]),
+            n_hashes=int(data["n_hashes"]),
+            sig_nbytes=int(data["sig_nbytes"]),
+            n_features=int(data["n_features"]),
+            seed=int(data["seed"]),
+        )
+
+        return cls(
+            n_hash_tables=int(data["n_hash_tables"]),
+            n_hashes=int(data["n_hashes"]),
+            n_features=int(data["n_features"]),
+            core=core,
+            index=index,
+        )
+
+
+def ensure_int32_indices(
+    M: Union[scipy.sparse.csr_matrix, cupyx.scipy.sparse.csr_matrix],
+) -> tuple[Union[np.ndarray, cp.ndarray], Union[np.ndarray, cp.ndarray]]:
+    """Ensure the indices of the matrix are int32"""
+    if M.indices.dtype != np.int32:
+        raise ValueError(
+            f"CUDA MinHashLSH requires int32 indices, got {M.indices.dtype}"
+        )
+
+    indices = M.indices.astype(np.int32)
+    indptr = M.indptr.astype(np.int32)
+    return indices, indptr

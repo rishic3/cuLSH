@@ -18,6 +18,7 @@ namespace py = pybind11;
 namespace culsh {
 namespace python {
 
+// --- RPLSHCore ---
 class RPLSHCore : public CUDAResourceManager {
   private:
     int n_hash_tables_ = 0;
@@ -110,6 +111,7 @@ class RPLSHCore : public CUDAResourceManager {
     uint64_t seed() const { return seed_; }
 };
 
+// --- MinHashCore ---
 class MinHashCore : public CUDAResourceManager {
   private:
     int n_hash_tables_ = 0;
@@ -163,6 +165,7 @@ class MinHashCore : public CUDAResourceManager {
     uint64_t seed() const { return seed_; }
 };
 
+// --- Candidates getters ---
 py::object get_candidate_indices(const core::Candidates& candidates, bool as_cupy = false) {
     size_t n = candidates.n_total_candidates;
 
@@ -235,6 +238,179 @@ py::object get_candidate_offsets(const core::Candidates& candidates, bool as_cup
     return result;
 }
 
+// --- Index getters ---
+py::array_t<int> get_index_candidate_indices(const core::Index& index) {
+    if (index.empty() || index.n_total_candidates == 0) {
+        return py::array_t<int>(0);
+    }
+    py::array_t<int> result(static_cast<py::ssize_t>(index.n_total_candidates));
+    CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), index.all_candidate_indices,
+                                index.n_total_candidates * sizeof(int), cudaMemcpyDeviceToHost));
+    return result;
+}
+
+py::array_t<uint8_t> get_index_bucket_signatures(const core::Index& index) {
+    if (index.empty() || index.n_total_buckets == 0) {
+        return py::array_t<uint8_t>(0);
+    }
+    size_t n = static_cast<size_t>(index.n_total_buckets) * static_cast<size_t>(index.sig_nbytes);
+    py::array_t<uint8_t> result(static_cast<py::ssize_t>(n));
+    CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), index.all_bucket_signatures,
+                                n * sizeof(uint8_t), cudaMemcpyDeviceToHost));
+    return result;
+}
+
+py::array_t<int> get_index_bucket_candidate_offsets(const core::Index& index) {
+    if (index.empty() || index.n_total_buckets == 0) {
+        return py::array_t<int>(0);
+    }
+    size_t n = index.n_total_buckets + 1;
+    py::array_t<int> result(static_cast<py::ssize_t>(n));
+    CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), index.bucket_candidate_offsets,
+                                n * sizeof(int), cudaMemcpyDeviceToHost));
+    return result;
+}
+
+py::array_t<int> get_index_table_bucket_offsets(const core::Index& index) {
+    if (index.empty() || index.n_hash_tables == 0) {
+        return py::array_t<int>(0);
+    }
+    size_t n = index.n_hash_tables + 1;
+    py::array_t<int> result(static_cast<py::ssize_t>(n));
+    CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), index.table_bucket_offsets,
+                                n * sizeof(int), cudaMemcpyDeviceToHost));
+    return result;
+}
+
+py::object get_rplsh_projection_matrix(const rplsh::Index& index) {
+    if (index.empty() || index.P == nullptr || index.core.n_features == 0) {
+        if (index.is_double) {
+            return py::array_t<double>(0);
+        }
+        return py::array_t<float>(0);
+    }
+
+    size_t n = static_cast<size_t>(index.core.n_hash_tables) *
+               static_cast<size_t>(index.core.n_hashes) *
+               static_cast<size_t>(index.core.n_features);
+
+    if (index.is_double) {
+        py::array_t<double> result(static_cast<py::ssize_t>(n));
+        CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), index.P,
+                                    n * sizeof(double), cudaMemcpyDeviceToHost));
+        return result;
+    } else {
+        py::array_t<float> result(static_cast<py::ssize_t>(n));
+        CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), index.P,
+                                    n * sizeof(float), cudaMemcpyDeviceToHost));
+        return result;
+    }
+}
+
+py::array_t<uint32_t> get_minhash_hash_a(const minhash::Index& index) {
+    if (index.empty() || index.A == nullptr) {
+        return py::array_t<uint32_t>(0);
+    }
+    size_t n = static_cast<size_t>(index.core.n_hash_tables) *
+               static_cast<size_t>(index.core.n_hashes);
+    py::array_t<uint32_t> result(static_cast<py::ssize_t>(n));
+    CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), index.A,
+                                n * sizeof(uint32_t), cudaMemcpyDeviceToHost));
+    return result;
+}
+
+py::array_t<uint32_t> get_minhash_hash_b(const minhash::Index& index) {
+    if (index.empty() || index.B == nullptr) {
+        return py::array_t<uint32_t>(0);
+    }
+    size_t n = static_cast<size_t>(index.core.n_hash_tables) *
+               static_cast<size_t>(index.core.n_hashes);
+    py::array_t<uint32_t> result(static_cast<py::ssize_t>(n));
+    CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), index.B,
+                                n * sizeof(uint32_t), cudaMemcpyDeviceToHost));
+    return result;
+}
+
+// --- Index loaders ---
+void load_core_index(
+    core::Index& index,
+    py::array_t<int>& candidate_indices,
+    py::array_t<uint8_t>& bucket_signatures,
+    py::array_t<int>& bucket_candidate_offsets,
+    py::array_t<int>& table_bucket_offsets,
+    int n_total_candidates,
+    int n_total_buckets,
+    int n_hash_tables,
+    int n_hashes,
+    int sig_nbytes,
+    int n_features,
+    uint64_t seed
+) {
+    // device arrays
+    index.all_candidate_indices = allocate_device_array<int>(candidate_indices);
+    index.all_bucket_signatures = allocate_device_array<uint8_t>(bucket_signatures);
+    index.bucket_candidate_offsets = allocate_device_array<int>(bucket_candidate_offsets);
+    index.table_bucket_offsets = allocate_device_array<int>(table_bucket_offsets);
+    // metadata
+    index.n_total_candidates = n_total_candidates;
+    index.n_total_buckets = n_total_buckets;
+    index.n_hash_tables = n_hash_tables;
+    index.n_hashes = n_hashes;
+    index.sig_nbytes = sig_nbytes;
+    index.n_features = n_features;
+    index.seed = seed;
+}
+
+template <typename T>
+std::unique_ptr<rplsh::Index> load_rplsh_index(
+    py::array_t<int>& candidate_indices,
+    py::array_t<uint8_t>& bucket_signatures,
+    py::array_t<int>& bucket_candidate_offsets,
+    py::array_t<int>& table_bucket_offsets,
+    py::array_t<T>& projection,
+    int n_total_candidates,
+    int n_total_buckets,
+    int n_hash_tables,
+    int n_hashes,
+    int sig_nbytes,
+    int n_features,
+    uint64_t seed
+) {
+    auto index = std::make_unique<rplsh::Index>();
+    load_core_index(index->core, candidate_indices, bucket_signatures,
+        bucket_candidate_offsets, table_bucket_offsets, n_total_candidates,
+        n_total_buckets, n_hash_tables, n_hashes, sig_nbytes, n_features, seed);
+
+    index->is_double = std::is_same_v<T, double>;
+    index->P = allocate_device_array<T>(projection);
+    return index;
+}
+
+std::unique_ptr<minhash::Index> load_minhash_index(
+    py::array_t<int> candidate_indices,
+    py::array_t<uint8_t> bucket_signatures,
+    py::array_t<int> bucket_candidate_offsets,
+    py::array_t<int> table_bucket_offsets,
+    py::array_t<uint32_t> hash_a,
+    py::array_t<uint32_t> hash_b,
+    int n_total_candidates,
+    int n_total_buckets,
+    int n_hash_tables,
+    int n_hashes,
+    int sig_nbytes,
+    int n_features,
+    uint64_t seed
+) {
+    auto index = std::make_unique<minhash::Index>();
+    load_core_index(index->core, candidate_indices, bucket_signatures,
+        bucket_candidate_offsets, table_bucket_offsets, n_total_candidates,
+        n_total_buckets, n_hash_tables, n_hashes, sig_nbytes, n_features, seed);
+
+    index->A = allocate_device_array<uint32_t>(hash_a);
+    index->B = allocate_device_array<uint32_t>(hash_b);
+    return index;
+}
+
 } // namespace python
 } // namespace culsh
 
@@ -264,7 +440,38 @@ PYBIND11_MODULE(_culsh_core, m) {
         .def_property_readonly("sig_nbytes", [](const culsh::rplsh::Index& idx) { return idx.core.sig_nbytes; })
         .def_property_readonly("n_features", [](const culsh::rplsh::Index& idx) { return idx.core.n_features; })
         .def_property_readonly("seed", [](const culsh::rplsh::Index& idx) { return idx.core.seed; })
-        .def_readonly("is_double", &culsh::rplsh::Index::is_double);
+        .def_readonly("is_double", &culsh::rplsh::Index::is_double)
+        .def("get_candidate_indices", [](const culsh::rplsh::Index& idx) { return get_index_candidate_indices(idx.core); })
+        .def("get_bucket_signatures", [](const culsh::rplsh::Index& idx) { return get_index_bucket_signatures(idx.core); })
+        .def("get_bucket_candidate_offsets", [](const culsh::rplsh::Index& idx) { return get_index_bucket_candidate_offsets(idx.core); })
+        .def("get_table_bucket_offsets", [](const culsh::rplsh::Index& idx) { return get_index_table_bucket_offsets(idx.core); })
+        .def("get_projection_matrix", &get_rplsh_projection_matrix)
+        .def_static("load_float", &load_rplsh_index<float>,
+            py::arg("candidate_indices"),
+            py::arg("bucket_signatures"),
+            py::arg("bucket_candidate_offsets"),
+            py::arg("table_bucket_offsets"),
+            py::arg("projection"),
+            py::arg("n_total_candidates"),
+            py::arg("n_total_buckets"),
+            py::arg("n_hash_tables"),
+            py::arg("n_hashes"),
+            py::arg("sig_nbytes"),
+            py::arg("n_features"),
+            py::arg("seed"))
+        .def_static("load_double", &load_rplsh_index<double>,
+            py::arg("candidate_indices"),
+            py::arg("bucket_signatures"),
+            py::arg("bucket_candidate_offsets"),
+            py::arg("table_bucket_offsets"),
+            py::arg("projection"),
+            py::arg("n_total_candidates"),
+            py::arg("n_total_buckets"),
+            py::arg("n_hash_tables"),
+            py::arg("n_hashes"),
+            py::arg("sig_nbytes"),
+            py::arg("n_features"),
+            py::arg("seed"));
 
     py::class_<RPLSHCore>(m, "RPLSHCore")
         .def(py::init<int, int, uint64_t>(),
@@ -291,7 +498,27 @@ PYBIND11_MODULE(_culsh_core, m) {
         .def_property_readonly("n_hashes", [](const culsh::minhash::Index& idx) { return idx.core.n_hashes; })
         .def_property_readonly("sig_nbytes", [](const culsh::minhash::Index& idx) { return idx.core.sig_nbytes; })
         .def_property_readonly("n_features", [](const culsh::minhash::Index& idx) { return idx.core.n_features; })
-        .def_property_readonly("seed", [](const culsh::minhash::Index& idx) { return idx.core.seed; });
+        .def_property_readonly("seed", [](const culsh::minhash::Index& idx) { return idx.core.seed; })
+        .def("get_candidate_indices", [](const culsh::minhash::Index& idx) { return get_index_candidate_indices(idx.core); })
+        .def("get_bucket_signatures", [](const culsh::minhash::Index& idx) { return get_index_bucket_signatures(idx.core); })
+        .def("get_bucket_candidate_offsets", [](const culsh::minhash::Index& idx) { return get_index_bucket_candidate_offsets(idx.core); })
+        .def("get_table_bucket_offsets", [](const culsh::minhash::Index& idx) { return get_index_table_bucket_offsets(idx.core); })
+        .def("get_hash_a", &get_minhash_hash_a)
+        .def("get_hash_b", &get_minhash_hash_b)
+        .def_static("load", &load_minhash_index,
+            py::arg("candidate_indices"),
+            py::arg("bucket_signatures"),
+            py::arg("bucket_candidate_offsets"),
+            py::arg("table_bucket_offsets"),
+            py::arg("hash_a"),
+            py::arg("hash_b"),
+            py::arg("n_total_candidates"),
+            py::arg("n_total_buckets"),
+            py::arg("n_hash_tables"),
+            py::arg("n_hashes"),
+            py::arg("sig_nbytes"),
+            py::arg("n_features"),
+            py::arg("seed"));
 
     py::class_<MinHashCore>(m, "MinHashCore")
         .def(py::init<int, int, uint64_t>(),

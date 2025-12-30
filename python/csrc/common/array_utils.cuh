@@ -1,5 +1,8 @@
 #pragma once
 
+#include "cuda_utils.cuh"
+
+#include <cuda_runtime.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
@@ -23,6 +26,20 @@ T* get_device_pointer(py::object obj) {
     uintptr_t ptr = data[0].cast<uintptr_t>();
 
     return reinterpret_cast<T*>(ptr);
+}
+
+/**
+ * @brief Copy numpy array to device memory and return pointer
+ */
+template <typename T>
+T* allocate_device_array(const py::array_t<T>& arr) {
+    size_t n = static_cast<size_t>(arr.size());
+    if (n == 0) return nullptr;
+
+    T* ptr = nullptr;
+    CUDA_CHECK_THROW(cudaMalloc(&ptr, n * sizeof(T)));
+    CUDA_CHECK_THROW(cudaMemcpy(ptr, arr.data(), n * sizeof(T), cudaMemcpyHostToDevice));
+    return ptr;
 }
 
 } // namespace python
