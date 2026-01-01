@@ -33,6 +33,7 @@ endif()
 
 # CUDA architectures
 set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89;90")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda")
 
 # Path to CUDA library source
 set(CUDA_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cuda")

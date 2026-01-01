@@ -6,6 +6,8 @@
 #include <cuda_runtime.h>
 #include <curand.h>
 #include <device_launch_parameters.h>
+#include <thrust/transform.h>
+#include <thrust/execution_policy.h>
 
 namespace culsh {
 namespace minhash {
@@ -16,17 +18,23 @@ static constexpr uint32_t HASH_PRIME = 4294967291u; // Largest 32-bit prime
 
 /**
  * @brief Normalize random integers to ensure A is non-zero and A, B < PRIME
+ * @param[in] stream CUDA stream
  * @param[in] n_hashes Number of hash functions to generate
  * @param[in] A Device pointer to array of n random integers
  * @param[in] B Device pointer to array of n random integers
  */
-__global__ void normalize_hash_integers_kernel(int n_hashes, uint32_t* A, uint32_t* B) {
-    size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-    if (idx >= n_hashes)
-        return;
-
-    A[idx] = (A[idx] % (HASH_PRIME - 1)) + 1;
-    B[idx] = B[idx] % HASH_PRIME;
+void normalize_hash_integers(cudaStream_t stream, int n_hashes, uint32_t* A, uint32_t* B) {
+    thrust::transform(
+        thrust::cuda::par.on(stream),
+        A, A + n_hashes, A,
+        [] __device__ (uint32_t a) { return (a % (HASH_PRIME - 1)) + 1; }
+    );
+    
+    thrust::transform(
+        thrust::cuda::par.on(stream),
+        B, B + n_hashes, B,
+        [] __device__ (uint32_t b) { return b % HASH_PRIME; }
+    );
 }
 
 /**
@@ -47,8 +55,7 @@ void generate_hash_integers(cudaStream_t stream, int n_hashes, uint64_t seed, ui
     CURAND_CHECK(curandGenerate(rng, A, n_hashes));
     CURAND_CHECK(curandGenerate(rng, B, n_hashes));
 
-    int blocks = (n_hashes + core::BLOCK_SIZE - 1) / core::BLOCK_SIZE;
-    normalize_hash_integers_kernel<<<blocks, core::BLOCK_SIZE, 0, stream>>>(n_hashes, A, B);
+    normalize_hash_integers(stream, n_hashes, A, B);
 
     CURAND_CHECK(curandDestroyGenerator(rng));
 }
