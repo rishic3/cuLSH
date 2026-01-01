@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../core/index.cuh"
-#include <cuda_runtime.h>
 #include <cstdint>
+#include <cuda_runtime.h>
 
 namespace culsh {
 namespace minhash {
@@ -19,8 +19,7 @@ struct Index {
     Index() = default;
     ~Index() { free(); }
 
-    Index(Index&& other) noexcept
-        : core(std::move(other.core)), A(other.A), B(other.B) {
+    Index(Index&& other) noexcept : core(std::move(other.core)), A(other.A), B(other.B) {
         other.A = nullptr;
         other.B = nullptr;
     }
@@ -69,5 +68,3 @@ struct Index {
 
 } // namespace minhash
 } // namespace culsh
-
-

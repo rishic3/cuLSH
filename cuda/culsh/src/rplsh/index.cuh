@@ -67,5 +67,3 @@ struct Index {
 
 } // namespace rplsh
 } // namespace culsh
-
-

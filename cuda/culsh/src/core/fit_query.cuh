@@ -26,8 +26,8 @@ namespace detail {
  * @param[in] sig_nbytes Signature width in bytes
  * @return Candidates object
  */
-inline Candidates fit_query(cudaStream_t stream, const void* X_sig, int n_samples, int n_hash_tables,
-                            int n_hashes, int sig_nbytes) {
+inline Candidates fit_query(cudaStream_t stream, const void* X_sig, int n_samples,
+                            int n_hash_tables, int n_hashes, int sig_nbytes) {
     size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
 
     // Fit and query on the input X_sig to get all-neighbors candidates (i.e. X_sig == Q_sig).

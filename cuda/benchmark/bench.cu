@@ -6,13 +6,13 @@
 
 #include <chrono>
 #include <culsh/rplsh/rplsh.hpp>
-#include <rplsh/index.cuh>
 #include <filesystem>
 #include <fstream>
 #include <getopt.h>
 #include <iomanip>
 #include <iostream>
 #include <random>
+#include <rplsh/index.cuh>
 #include <sstream>
 #include <string>
 #include <vector>

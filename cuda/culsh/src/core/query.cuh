@@ -28,10 +28,9 @@ namespace detail {
  * @param[in] sig_nbytes Signature width in bytes
  * @return Matching bucket index or -1 if no match found
  */
-static __device__ int find_bucket_in_table(const uint8_t* all_bucket_signatures,
-                                                           int table_start, int table_end,
-                                                           const uint8_t* query_sig,
-                                                           int sig_nbytes) {
+static __device__ int find_bucket_in_table(const uint8_t* all_bucket_signatures, int table_start,
+                                           int table_end, const uint8_t* query_sig,
+                                           int sig_nbytes) {
 
     if (table_start >= table_end)
         return -1;
@@ -73,10 +72,10 @@ static __device__ int find_bucket_in_table(const uint8_t* all_bucket_signatures,
  * (query, table) pair
  */
 static __global__ void find_matching_buckets_kernel(const uint8_t* Q_sig,
-                                             const uint8_t* all_bucket_signatures,
-                                             const int* table_bucket_offsets, int n_queries,
-                                             int n_hash_tables, int sig_nbytes,
-                                             int* matched_bucket_indices) {
+                                                    const uint8_t* all_bucket_signatures,
+                                                    const int* table_bucket_offsets, int n_queries,
+                                                    int n_hash_tables, int sig_nbytes,
+                                                    int* matched_bucket_indices) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
     if (idx >= n_items)
@@ -113,8 +112,8 @@ static __global__ void find_matching_buckets_kernel(const uint8_t* Q_sig,
  * pair
  */
 static __global__ void count_candidates_kernel(const int* bucket_candidate_offsets,
-                                        const int* matched_bucket_indices, int n_queries,
-                                        int n_hash_tables, int* candidate_counts) {
+                                               const int* matched_bucket_indices, int n_queries,
+                                               int n_hash_tables, int* candidate_counts) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     size_t n_items = static_cast<size_t>(n_queries) * n_hash_tables;
     if (idx >= n_items)
@@ -140,7 +139,8 @@ static __global__ void count_candidates_kernel(const int* bucket_candidate_offse
  * @param[out] query_candidate_counts Device pointer to array of candidate counts for each query
  */
 static __global__ void aggregate_query_results_kernel(const int* candidate_counts, int n_queries,
-                                               int n_hash_tables, size_t* query_candidate_counts) {
+                                                      int n_hash_tables,
+                                                      size_t* query_candidate_counts) {
     int query_id = static_cast<int>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (query_id >= n_queries)
         return;
@@ -165,9 +165,8 @@ static __global__ void aggregate_query_results_kernel(const int* candidate_count
  * for each query
  */
 static __global__ void compute_table_prefix_offsets_kernel(const int* candidate_counts,
-                                                    int n_queries,
-                                                    int n_hash_tables,
-                                                    size_t* table_prefix_offsets) {
+                                                           int n_queries, int n_hash_tables,
+                                                           size_t* table_prefix_offsets) {
     int query_id = static_cast<int>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (query_id >= n_queries)
         return;
@@ -197,11 +196,11 @@ static __global__ void compute_table_prefix_offsets_kernel(const int* candidate_
  * @param[out] output_candidates Device pointer to array of collected candidates
  */
 static __global__ void collect_candidates_kernel(const int* bucket_candidate_offsets,
-                                          const int* all_candidate_indices,
-                                          const int* matched_bucket_indices,
-                                          const size_t* query_candidate_offsets,
-                                          const size_t* table_prefix_offsets, int n_queries,
-                                          int n_hash_tables, int* output_candidates) {
+                                                 const int* all_candidate_indices,
+                                                 const int* matched_bucket_indices,
+                                                 const size_t* query_candidate_offsets,
+                                                 const size_t* table_prefix_offsets, int n_queries,
+                                                 int n_hash_tables, int* output_candidates) {
     // One warp per (query, table) pair
     int lane = threadIdx.x & 31;
     int warps_per_block = blockDim.x >> 5;
@@ -241,7 +240,8 @@ static __global__ void collect_candidates_kernel(const int* bucket_candidate_off
  * @param[in] n_items Number of items
  * @param[out] flags Device pointer to array of flags
  */
-static __global__ void mark_unique_kernel(const int* sorted_candidates, size_t n_items, int* flags) {
+static __global__ void mark_unique_kernel(const int* sorted_candidates, size_t n_items,
+                                          int* flags) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_items)
         return;

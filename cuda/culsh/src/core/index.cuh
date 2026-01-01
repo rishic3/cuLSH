@@ -54,7 +54,8 @@ struct Index {
     Index()
         : all_candidate_indices(nullptr), all_bucket_signatures(nullptr),
           bucket_candidate_offsets(nullptr), table_bucket_offsets(nullptr), n_total_candidates(0),
-          n_total_buckets(0), n_hash_tables(0), n_hashes(0), sig_nbytes(0), n_features(0), seed(0) {}
+          n_total_buckets(0), n_hash_tables(0), n_hashes(0), sig_nbytes(0), n_features(0), seed(0) {
+    }
 
     /**
      * @brief Destructor

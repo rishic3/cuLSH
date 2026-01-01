@@ -5,7 +5,6 @@
 #include "../core/query.cuh"
 #include "hash.cuh"
 #include "index.cuh"
-#include "projections.cuh"
 #include <cuda_runtime.h>
 #include <culsh/rplsh/params.hpp>
 #include <culsh/rplsh/rplsh.hpp>

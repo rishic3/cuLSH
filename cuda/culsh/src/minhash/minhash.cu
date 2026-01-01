@@ -5,11 +5,11 @@
 #include "../core/query.cuh"
 #include "hash.cuh"
 #include "index.cuh"
+#include <cassert>
 #include <cuda_runtime.h>
 #include <culsh/minhash/minhash.hpp>
 #include <culsh/minhash/params.hpp>
 #include <curand.h>
-#include <cassert>
 
 namespace culsh {
 namespace minhash {
