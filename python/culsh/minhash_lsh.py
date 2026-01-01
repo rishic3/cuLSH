@@ -24,14 +24,14 @@ class MinHashLSH:
         Number of hash tables (OR-amplification of the locality-sensitive family).
         More tables provide additional independent chances to find neighbors,
         improving recall at the cost of more false positives. Corresponds to 'b'
-        in the amplified probability (1-(1-p^r)^b). The approximate similarity
-        threshold to qualify as a candidate neighbor is (1/b)^(1/r).
+        in the amplified probability of collision (1-(1-s^r)^b), where s is the
+        Jaccard similarity between two sets.
     n_hashes : int
-        Number of hash functions per table (AND-amplification of the locality-sensitive family).
-        More hashes require samples to agree on more hash bits, increasing precision
-        at the cost of more false negatives. Corresponds to 'r' in the amplified
-        probability (1-(1-p^r)^b). The approximate similarity threshold to qualify as a
-        candidate neighbor is (1/b)^(1/r).
+        Number of hash functions per table (AND-amplification of the locality-sensitive
+        family). More hashes require samples to agree on more hash bits, increasing
+        precision at the cost of more false negatives. Corresponds to 'r' in the amplified
+        probability of collision (1-(1-s^r)^b), where s is the Jaccard similarity between
+        two sets.
     seed : int, optional
         Random seed for reproducible hashes. Default is 42.
 
