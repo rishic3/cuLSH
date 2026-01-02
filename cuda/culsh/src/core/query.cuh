@@ -61,7 +61,8 @@ static __device__ int find_bucket_in_table(const uint8_t* all_bucket_signatures,
 
 /**
  * @brief Find matching bucket for each (query, table) pair
- * @param[in] Q_sig Device pointer to query signature matrix
+ * @param[in] Q_sig Device pointer to signature matrix (n_hash_tables x n_queries x sig_nbytes).
+ * Treated as opaque bytes and can be any fixed-width type (only byte-level equality matters).
  * @param[in] all_bucket_signatures Device pointer to array of all bucket signatures for each table
  * @param[in] table_bucket_offsets Device pointer to array of offsets for each table's buckets in
  * all_bucket_signatures
@@ -476,7 +477,8 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
 /**
  * @brief Query LSH index to find candidates
  * @param[in] stream CUDA stream
- * @param[in] Q_sig Device pointer to signature matrix (n_hash_tables x n_queries x sig_nbytes)
+ * @param[in] Q_sig Device pointer to signature matrix (n_hash_tables x n_queries x sig_nbytes).
+ * Treated as opaque bytes and can be any fixed-width type (only byte-level equality matters).
  * @param[in] n_queries Number of input rows
  * @param[in] sig_nbytes Signature width in bytes
  * @param[in] index Device index

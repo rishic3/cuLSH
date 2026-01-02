@@ -12,6 +12,7 @@ find_package(CUDAToolkit REQUIRED)
 add_library(culsh_lib 
     culsh/src/rplsh/rplsh.cu
     culsh/src/minhash/minhash.cu
+    culsh/src/pslsh/pslsh.cu
 )
 
 # include directories

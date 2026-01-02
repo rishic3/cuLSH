@@ -6,8 +6,8 @@
 #include <cuda_runtime.h>
 #include <curand.h>
 #include <device_launch_parameters.h>
-#include <thrust/transform.h>
 #include <thrust/execution_policy.h>
+#include <thrust/transform.h>
 
 namespace culsh {
 namespace minhash {
@@ -24,38 +24,31 @@ static constexpr uint32_t HASH_PRIME = 4294967291u; // Largest 32-bit prime
  * @param[in] B Device pointer to array of n random integers
  */
 void normalize_hash_integers(cudaStream_t stream, int n_hashes, uint32_t* A, uint32_t* B) {
-    thrust::transform(
-        thrust::cuda::par.on(stream),
-        A, A + n_hashes, A,
-        [] __device__ (uint32_t a) { return (a % (HASH_PRIME - 1)) + 1; }
-    );
-    
-    thrust::transform(
-        thrust::cuda::par.on(stream),
-        B, B + n_hashes, B,
-        [] __device__ (uint32_t b) { return b % HASH_PRIME; }
-    );
+    thrust::transform(thrust::cuda::par.on(stream), A, A + n_hashes, A,
+                      (thrust::placeholders::_1 % (HASH_PRIME - 1)) + 1);
+
+    thrust::transform(thrust::cuda::par.on(stream), B, B + n_hashes, B,
+                      thrust::placeholders::_1 % HASH_PRIME);
 }
 
 /**
  * @brief Generate random integers to construct 2-universal hash functions
  * @param[in] stream CUDA stream
- * @param[in] n_hashes Number of hash functions to generate
+ * @param[in] n Number of hash functions to generate
  * @param[in] seed Seed for the random number generator
  * @param[out] A Device pointer to array of n random integers
  * @param[out] B Device pointer to array of n random integers
  */
-void generate_hash_integers(cudaStream_t stream, int n_hashes, uint64_t seed, uint32_t* A,
-                            uint32_t* B) {
+void generate_hash_integers(cudaStream_t stream, int n, uint64_t seed, uint32_t* A, uint32_t* B) {
     curandGenerator_t rng;
     CURAND_CHECK(curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT));
     CURAND_CHECK(curandSetStream(rng, stream));
     CURAND_CHECK(curandSetPseudoRandomGeneratorSeed(rng, seed));
 
-    CURAND_CHECK(curandGenerate(rng, A, n_hashes));
-    CURAND_CHECK(curandGenerate(rng, B, n_hashes));
+    CURAND_CHECK(curandGenerate(rng, A, n));
+    CURAND_CHECK(curandGenerate(rng, B, n));
 
-    normalize_hash_integers(stream, n_hashes, A, B);
+    normalize_hash_integers(stream, n, A, B);
 
     CURAND_CHECK(curandDestroyGenerator(rng));
 }
@@ -71,7 +64,7 @@ void generate_hash_integers(cudaStream_t stream, int n_hashes, uint64_t seed, ui
  * @param[in] n_features Dimensionality of each input sample
  * @param[in] n_hash_tables Number of hash tables
  * @param[in] n_hashes Number of hashes per table
- * @param[out] X_sig Output minhash signatures (n_samples x n_hash_tables * n_hashes)
+ * @param[out] X_sig Table-major minhash signatures (n_hash_tables x n_samples x n_hashes)
  */
 __global__ void compute_minhash_kernel(const int* X_indices, const int* X_indptr, const uint32_t* A,
                                        const uint32_t* B, int n_samples, int n_hash_tables,
@@ -141,7 +134,7 @@ __global__ void compute_minhash_kernel(const int* X_indices, const int* X_indptr
  * @param[in] n_samples Number of input samples
  * @param[in] n_hash_tables Number of hash tables
  * @param[in] n_hashes Number of hashes per table
- * @param[out] X_sig Output minhash signatures (n_samples x n_hash_tables * n_hashes)
+ * @param[out] X_sig Table-major minhash signatures (n_hash_tables x n_samples x n_hashes)
  */
 void compute_minhash(cudaStream_t stream, const int* X_indices, const int* X_indptr,
                      const uint32_t* A, const uint32_t* B, int n_samples, int n_hash_tables,

@@ -208,7 +208,8 @@ static __global__ void build_final_index_kernel(const uint8_t* X_sig,
 /**
  * @brief Fit flat LSH index structure on GPU
  * @param[in] stream CUDA stream
- * @param[in] X_sig Device pointer to signature matrix (n_hash_tables x n_samples x sig_nbytes)
+ * @param[in] X_sig Device pointer to signature matrix (n_hash_tables x n_samples x sig_nbytes).
+ * Treated as opaque bytes and can be any fixed-width type (only byte-level equality matters).
  * @param[in] n_samples Number of input rows
  * @param[in] n_hash_tables Number of hash tables
  * @param[in] n_hashes Number of hashes per table
