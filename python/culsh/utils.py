@@ -2,12 +2,20 @@
 Utility functions.
 """
 
-from typing import Union
+import random
+from typing import Optional, Union
 
 import cupy as cp
 import cupyx.scipy.sparse
 import numpy as np
 import scipy.sparse
+
+
+def resolve_seed(seed: Optional[int]) -> int:
+    """If seed is None, generate a random seed, otherwise return as-is."""
+    if seed is None:
+        return random.randint(0, 2**63 - 1)
+    return seed
 
 
 def get_array_info(
