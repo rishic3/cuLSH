@@ -2,7 +2,7 @@
 MinHash LSH
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import cupy as cp
 import cupyx.scipy.sparse
@@ -10,7 +10,7 @@ import numpy as np
 import scipy.sparse
 
 from culsh._culsh_core import Candidates, MinHashCore, MinHashIndex
-from culsh.utils import ensure_device_array, get_array_info
+from culsh.utils import ensure_device_array, get_array_info, resolve_seed
 
 
 class MinHashLSH:
@@ -33,7 +33,7 @@ class MinHashLSH:
         probability of collision (1-(1-s^r)^b), where s is the Jaccard similarity between
         two sets.
     seed : int, optional
-        Random seed for reproducible hashes. Default is 42.
+        Random seed for reproducible hashes. If None (default), a random seed is used.
 
     Examples
     --------
@@ -58,9 +58,9 @@ class MinHashLSH:
 
     def __init__(
         self,
-        n_hash_tables: int = 16,
-        n_hashes: int = 8,
-        seed: int = 42,
+        n_hash_tables: int,
+        n_hashes: int,
+        seed: Optional[int] = None,
     ):
         if n_hash_tables <= 0:
             raise ValueError("n_hash_tables must be positive")
@@ -69,7 +69,7 @@ class MinHashLSH:
 
         self._n_hash_tables = n_hash_tables
         self._n_hashes = n_hashes
-        self._seed = seed
+        self._seed = resolve_seed(seed)
 
     @property
     def n_hash_tables(self) -> int:

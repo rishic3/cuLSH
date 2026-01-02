@@ -8,7 +8,7 @@ import cupy as cp
 import numpy as np
 
 from culsh._culsh_core import Candidates, RPLSHCore, RPLSHIndex
-from culsh.utils import ensure_device_array, get_array_info
+from culsh.utils import ensure_device_array, get_array_info, resolve_seed
 
 
 class RPLSH:
@@ -31,7 +31,7 @@ class RPLSH:
         amplified probability (1-(1-s^r)^b), where s is the cosine similarity between two
         vectors.
     seed : int, optional
-        Random seed for reproducible hashes. Default is 42.
+        Random seed for reproducible hashes. If None (default), a random seed is used.
 
     Examples
     --------
@@ -55,9 +55,9 @@ class RPLSH:
 
     def __init__(
         self,
-        n_hash_tables: int = 16,
-        n_hashes: int = 8,
-        seed: int = 42,
+        n_hash_tables: int,
+        n_hashes: int,
+        seed: Optional[int] = None,
     ):
         if n_hash_tables <= 0:
             raise ValueError("n_hash_tables must be positive")
@@ -66,7 +66,7 @@ class RPLSH:
 
         self._n_hash_tables = n_hash_tables
         self._n_hashes = n_hashes
-        self._seed = seed
+        self._seed = resolve_seed(seed)
 
     @property
     def n_hash_tables(self) -> int:
