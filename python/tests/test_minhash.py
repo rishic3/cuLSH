@@ -1,6 +1,8 @@
 import os
 import tempfile
+from typing import Union
 
+import cupyx.scipy.sparse
 import numpy as np
 import pytest
 import scipy.sparse
@@ -12,8 +14,8 @@ from culsh.utils import compute_recall
 
 
 def get_jaccard_top_k(
-    X: scipy.sparse.csr_matrix,
-    Q: scipy.sparse.csr_matrix,
+    X: Union[scipy.sparse.csr_matrix, cupyx.scipy.sparse.csr_matrix],
+    Q: Union[scipy.sparse.csr_matrix, cupyx.scipy.sparse.csr_matrix],
     query_idx: int,
     k: int,
 ) -> np.ndarray:
