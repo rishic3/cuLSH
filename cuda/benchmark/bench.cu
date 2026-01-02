@@ -136,7 +136,7 @@ int main(int argc, char* argv[]) {
                           static_cast<size_t>(n_test_queries) * n_features * sizeof(float),
                           cudaMemcpyHostToDevice));
 
-    culsh::rplsh::RPLSHParams params{conf.n_hash_tables, conf.n_hashes, conf.seed};
+    culsh::RPLSHParams params{conf.n_hash_tables, conf.n_hashes, conf.seed};
 
     // fit
     cout << "Running CUDA fit()..." << endl;
