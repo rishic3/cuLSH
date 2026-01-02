@@ -1,6 +1,7 @@
 import os
 import tempfile
 
+import cupy as cp
 import numpy as np
 import pytest
 from ref_lsh import PStableLSH as RefPSLSH
@@ -237,3 +238,22 @@ def test_pslsh_batched_query_consistency(cupy, batch_size):
         candidates2.get_offsets(),
         err_msg="Offsets differ",
     )
+
+
+@pytest.mark.parametrize("cupy", [False, True])
+def test_pslsh_auto_window_size(cupy):
+    """Test that _estimate_window_size correctly computes mean magnitude."""
+    n_samples = 1000
+    n_features = 128
+
+    # Create data with magnitude 100 (normalize then scale)
+    np.random.seed(42)
+    X = np.random.randn(n_samples, n_features).astype(np.float32)
+    X = X / np.linalg.norm(X, axis=1, keepdims=True)
+    X = X * 100
+
+    if cupy:
+        X = cp.asarray(X)
+
+    window_size = PStableLSH._estimate_window_size(X, scale_factor=1.0)
+    assert window_size == 100, f"Expected window_size=100, got {window_size}"
