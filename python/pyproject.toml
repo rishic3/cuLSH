@@ -26,3 +26,7 @@ dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools]
 packages = ["culsh"]
+
+[tool.pyright]
+typeCheckingMode = "standard"
+reportImplicitOverride = "error"

@@ -3,40 +3,33 @@ import tempfile
 
 import numpy as np
 import pytest
-import scipy.sparse
-from ref_lsh import MinHashLSH as RefMinHashLSH
-from utils import evaluate_recall_at_k, generate_sparse_data
+from ref_lsh import RandomProjectionLSH as RefRPLSH
+from utils import evaluate_recall_at_k, generate_dense_data
 
-from culsh import MinHashLSH, MinHashLSHModel
+from culsh import RPLSH, RPLSHModel
 from culsh.utils import compute_recall
 
 
-def get_jaccard_top_k(
-    X: scipy.sparse.csr_matrix,
-    Q: scipy.sparse.csr_matrix,
+def get_cosine_top_k(
+    X: np.ndarray,
+    Q: np.ndarray,
     query_idx: int,
     k: int,
 ) -> np.ndarray:
-    """Get top-k indices from X by Jaccard similarity to Q[query_idx]"""
-    q = Q.getrow(query_idx)
-    # Intersection via dot product: X @ q.T
-    intersections = X.dot(q.T).toarray().ravel()
-    # Row-wise nnz counts
-    x_nnz = np.diff(X.indptr)
-    q_nnz = q.nnz
-    # Union = |A| + |B| - |A ∩ B|
-    unions = x_nnz + q_nnz - intersections
-    # Jaccard = intersection / union
-    jaccard_sims = np.where(unions > 0, intersections / unions, 0.0)
-    return np.argsort(jaccard_sims)[-k:][::-1]
+    """Get top-k indices from X by cosine similarity to Q[query_idx]"""
+    q = Q[query_idx]
+    q_norm = q / np.linalg.norm(q)
+    X_norm = X / np.linalg.norm(X, axis=1, keepdims=True)
+    cos_sims = np.dot(X_norm, q_norm)
+    return np.argsort(cos_sims)[-k:][::-1]
 
 
-@pytest.mark.parametrize("density", [0.1, 0.5])
+@pytest.mark.parametrize("dtype", [np.float32, np.float64])
 @pytest.mark.parametrize("n_samples", [1000])
 @pytest.mark.parametrize("n_hash_tables", [8, 32])
 @pytest.mark.parametrize("n_hashes", [8, 16])
-def test_minhash_recall_vs_reference(density, n_samples, n_hash_tables, n_hashes):
-    """Test cuLSH MinHash against reference CPU implementation."""
+def test_rplsh_recall_vs_reference(dtype, n_samples, n_hash_tables, n_hashes):
+    """Test cuLSH RPLSH against reference CPU implementation."""
     THRESHOLD = 0.05
 
     n_features = 100
@@ -44,23 +37,23 @@ def test_minhash_recall_vs_reference(density, n_samples, n_hash_tables, n_hashes
     k = 20
     seed = 42
 
-    X = generate_sparse_data(n_samples, n_features, density)
+    X = generate_dense_data(n_samples, n_features, dtype=dtype)
 
     # --- Reference CPU ---
-    ref_lsh = RefMinHashLSH(n_hash_tables=n_hash_tables, n_hashes=n_hashes, seed=seed)
+    ref_lsh = RefRPLSH(n_hash_tables=n_hash_tables, n_projections=n_hashes, seed=seed)
     ref_model = ref_lsh.fit(X)
 
     # Query and compute recall
     ref_recalls = []
     ref_candidates = ref_model.query(X[:n_eval])
     for q_idx in range(n_eval):
-        gt = get_jaccard_top_k(X, X, q_idx, k)
+        gt = get_cosine_top_k(X, X, q_idx, k)
         ref_recalls.append(compute_recall(np.array(ref_candidates[q_idx]), gt))
 
     ref_mean_recall = np.mean(ref_recalls)
 
     # --- cuLSH ---
-    lsh = MinHashLSH(n_hash_tables=n_hash_tables, n_hashes=n_hashes, seed=seed)
+    lsh = RPLSH(n_hash_tables=n_hash_tables, n_hashes=n_hashes, seed=seed)
     candidates = lsh.fit_query(X)
 
     indices = candidates.get_indices()
@@ -68,7 +61,7 @@ def test_minhash_recall_vs_reference(density, n_samples, n_hash_tables, n_hashes
 
     # Compute recalls
     culsh_recalls = evaluate_recall_at_k(
-        X, X, indices, offsets, get_top_k_fn=get_jaccard_top_k, k=k  # type: ignore
+        X, X, indices, offsets, get_top_k_fn=get_cosine_top_k, k=k
     )
     culsh_mean_recall = np.mean(culsh_recalls)
 
@@ -80,29 +73,29 @@ def test_minhash_recall_vs_reference(density, n_samples, n_hash_tables, n_hashes
     assert culsh_mean_recall <= 1.0  # sanity check
 
 
-def test_minhash_save_load():
-    """Test MinHashLSH save and load."""
+def test_rplsh_save_load():
+    """Test RPLSH save and load."""
     THRESHOLD = 0.00001
 
     n_hash_tables = 16
-    n_hashes = 4
+    n_hashes = 8
     n_samples = 500
     n_features = 100
     n_queries = 20
     seed = 42
     k = 20
 
-    X = generate_sparse_data(n_samples, n_features, 0.1)
-    Q = generate_sparse_data(n_queries, n_features, 0.1)
+    X = generate_dense_data(n_samples, n_features)
+    Q = generate_dense_data(n_queries, n_features, seed=123)
 
     # Fit model
-    lsh = MinHashLSH(n_hash_tables=n_hash_tables, n_hashes=n_hashes, seed=seed)
+    lsh = RPLSH(n_hash_tables=n_hash_tables, n_hashes=n_hashes, seed=seed)
     model = lsh.fit(X)
 
     # Save and reload
     with tempfile.TemporaryDirectory() as tempdir:
-        model.save(os.path.join(tempdir, "test_minhash.npz"))
-        loaded_model = MinHashLSHModel.load(os.path.join(tempdir, "test_minhash.npz"))
+        model.save(os.path.join(tempdir, "test_rplsh.npz"))
+        loaded_model = RPLSHModel.load(os.path.join(tempdir, "test_rplsh.npz"))
 
     # Check attributes
     for attr in [
@@ -126,16 +119,14 @@ def test_minhash_save_load():
         )
 
     # Check recall
-    def query_and_get_recall(
-        model: MinHashLSHModel, X: scipy.sparse.csr_matrix, Q: scipy.sparse.csr_matrix
-    ) -> float:
+    def query_and_get_recall(model: RPLSHModel, X: np.ndarray, Q: np.ndarray) -> float:
         candidates = model.query(Q)
         recalls = evaluate_recall_at_k(
             X,
             Q,
             candidates.get_indices(),
             candidates.get_offsets(),
-            get_top_k_fn=get_jaccard_top_k,  # type: ignore
+            get_top_k_fn=get_cosine_top_k,
             k=k,
         )
         return float(np.mean(recalls))
