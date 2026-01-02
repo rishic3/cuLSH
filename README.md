@@ -13,6 +13,7 @@ GPU-accelerated Locality Sensitive Hashing with Python bindings.
 ## Installation
 
 ```bash
+git clone https://github.com/rishic3/cuLSH.git
 cd python
 pip install .
 ```
