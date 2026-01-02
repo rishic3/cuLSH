@@ -28,11 +28,11 @@ namespace python {
  * @brief Manage CUDA resources (cuBLAS handle, stream)
  */
 class CUDAResourceManager {
-  protected:
+protected:
     cublasHandle_t cublas_handle_ = nullptr;
     cudaStream_t stream_ = nullptr;
 
-  public:
+public:
     CUDAResourceManager() {
         CUBLAS_CHECK_THROW(cublasCreate(&cublas_handle_));
         CUDA_CHECK_THROW(cudaStreamCreate(&stream_));
@@ -62,4 +62,3 @@ class CUDAResourceManager {
 
 } // namespace python
 } // namespace culsh
-

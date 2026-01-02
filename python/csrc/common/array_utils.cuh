@@ -14,8 +14,7 @@ namespace python {
 /**
  * @brief Get device pointer from a cupy array
  */
-template <typename T>
-T* get_device_pointer(py::object obj) {
+template <typename T> T* get_device_pointer(py::object obj) {
     if (!py::hasattr(obj, "__cuda_array_interface__")) {
         throw std::runtime_error("Expected cupy array with __cuda_array_interface__.");
     }
@@ -31,10 +30,10 @@ T* get_device_pointer(py::object obj) {
 /**
  * @brief Copy numpy array to device memory and return pointer
  */
-template <typename T>
-T* make_device_array(const py::array_t<T>& arr) {
+template <typename T> T* make_device_array(const py::array_t<T>& arr) {
     size_t n = static_cast<size_t>(arr.size());
-    if (n == 0) return nullptr;
+    if (n == 0)
+        return nullptr;
 
     T* ptr = nullptr;
     CUDA_CHECK_THROW(cudaMalloc(&ptr, n * sizeof(T)));
@@ -45,13 +44,13 @@ T* make_device_array(const py::array_t<T>& arr) {
 /**
  * @brief Copy device array to numpy array
  */
-template <typename T>
-py::array_t<T> copy_to_numpy(const T* device_ptr, size_t n) {
+template <typename T> py::array_t<T> copy_to_numpy(const T* device_ptr, size_t n) {
     if (device_ptr == nullptr || n == 0) {
         return py::array_t<T>(0);
     }
     py::array_t<T> result(static_cast<py::ssize_t>(n));
-    CUDA_CHECK_THROW(cudaMemcpy(result.mutable_data(), device_ptr, n * sizeof(T), cudaMemcpyDeviceToHost));
+    CUDA_CHECK_THROW(
+        cudaMemcpy(result.mutable_data(), device_ptr, n * sizeof(T), cudaMemcpyDeviceToHost));
     return result;
 }
 
