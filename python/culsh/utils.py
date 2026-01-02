@@ -44,9 +44,15 @@ def ensure_device_array(
         return cp.asarray(arr, order="C")
 
 
-def compute_recall(lsh_indices: np.ndarray, gt_indices: np.ndarray) -> float:
+def compute_recall(
+    lsh_indices: Union[np.ndarray, cp.ndarray],
+    gt_indices: Union[np.ndarray, cp.ndarray],
+) -> float:
     """Compute recall score between LSH candidates and ground truth"""
     if len(gt_indices) == 0:
         return 0.0
-    intersection = np.intersect1d(lsh_indices, gt_indices)
+    if isinstance(lsh_indices, cp.ndarray):
+        intersection = cp.intersect1d(lsh_indices, gt_indices)
+    else:
+        intersection = np.intersect1d(lsh_indices, gt_indices)
     return len(intersection) / len(gt_indices)

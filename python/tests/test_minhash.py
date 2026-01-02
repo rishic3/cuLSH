@@ -33,7 +33,7 @@ def get_jaccard_top_k(
 
 @pytest.mark.parametrize("density", [0.1, 0.5])
 @pytest.mark.parametrize("n_samples", [1000])
-@pytest.mark.parametrize("n_hash_tables", [8, 32])
+@pytest.mark.parametrize("n_hash_tables", [8, 32, 64])
 @pytest.mark.parametrize("n_hashes", [8, 16])
 def test_minhash_recall_vs_reference(density, n_samples, n_hash_tables, n_hashes):
     """Test cuLSH MinHash against reference CPU implementation."""
@@ -80,7 +80,8 @@ def test_minhash_recall_vs_reference(density, n_samples, n_hash_tables, n_hashes
     assert culsh_mean_recall <= 1.0  # sanity check
 
 
-def test_minhash_save_load():
+@pytest.mark.parametrize("cupy", [False, True])
+def test_minhash_save_load(cupy):
     """Test MinHashLSH save and load."""
     THRESHOLD = 0.00001
 
@@ -92,8 +93,8 @@ def test_minhash_save_load():
     seed = 42
     k = 20
 
-    X = generate_sparse_data(n_samples, n_features, 0.1)
-    Q = generate_sparse_data(n_queries, n_features, 0.1)
+    X = generate_sparse_data(n_samples, n_features, 0.1, cupy=cupy)
+    Q = generate_sparse_data(n_queries, n_features, 0.1, cupy=cupy)
 
     # Fit model
     lsh = MinHashLSH(n_hash_tables=n_hash_tables, n_hashes=n_hashes, seed=seed)
@@ -126,9 +127,7 @@ def test_minhash_save_load():
         )
 
     # Check recall
-    def query_and_get_recall(
-        model: MinHashLSHModel, X: scipy.sparse.csr_matrix, Q: scipy.sparse.csr_matrix
-    ) -> float:
+    def query_and_get_recall(model: MinHashLSHModel, X, Q) -> float:
         candidates = model.query(Q)
         recalls = evaluate_recall_at_k(
             X,
@@ -148,3 +147,35 @@ def test_minhash_save_load():
 
     diff = abs(mean_recall - loaded_mean_recall)
     assert diff < THRESHOLD, f"Recall difference > {THRESHOLD}: {diff:.4f}"
+
+
+@pytest.mark.parametrize("cupy", [False, True])
+def test_minhash_fit_query_consistency(cupy):
+    """Verify fit() + query() gives same results as fit_query()"""
+    n_samples = 500
+    n_features = 100
+    n_hash_tables = 16
+    n_hashes = 8
+    seed = 42
+
+    X = generate_sparse_data(n_samples, n_features, density=0.2, cupy=cupy)
+
+    lsh = MinHashLSH(n_hash_tables=n_hash_tables, n_hashes=n_hashes, seed=seed)
+
+    # fit_query
+    candidates1 = lsh.fit_query(X)
+
+    # fit + query
+    model = lsh.fit(X)
+    candidates2 = model.query(X)
+
+    np.testing.assert_array_equal(
+        candidates1.get_indices(),
+        candidates2.get_indices(),
+        err_msg="Indices differ",
+    )
+    np.testing.assert_array_equal(
+        candidates1.get_offsets(),
+        candidates2.get_offsets(),
+        err_msg="Offsets differ",
+    )

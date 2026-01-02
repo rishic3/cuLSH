@@ -26,7 +26,7 @@ def get_cosine_top_k(
 
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
 @pytest.mark.parametrize("n_samples", [1000])
-@pytest.mark.parametrize("n_hash_tables", [8, 32])
+@pytest.mark.parametrize("n_hash_tables", [8, 32, 64])
 @pytest.mark.parametrize("n_hashes", [8, 16])
 def test_rplsh_recall_vs_reference(dtype, n_samples, n_hash_tables, n_hashes):
     """Test cuLSH RPLSH against reference CPU implementation."""
@@ -61,7 +61,7 @@ def test_rplsh_recall_vs_reference(dtype, n_samples, n_hash_tables, n_hashes):
 
     # Compute recalls
     culsh_recalls = evaluate_recall_at_k(
-        X, X, indices, offsets, get_top_k_fn=get_cosine_top_k, k=k
+        X, X, indices, offsets, get_top_k_fn=get_cosine_top_k, k=k  # type: ignore
     )
     culsh_mean_recall = np.mean(culsh_recalls)
 
@@ -73,7 +73,8 @@ def test_rplsh_recall_vs_reference(dtype, n_samples, n_hash_tables, n_hashes):
     assert culsh_mean_recall <= 1.0  # sanity check
 
 
-def test_rplsh_save_load():
+@pytest.mark.parametrize("cupy", [False, True])
+def test_rplsh_save_load(cupy):
     """Test RPLSH save and load."""
     THRESHOLD = 0.00001
 
@@ -85,8 +86,8 @@ def test_rplsh_save_load():
     seed = 42
     k = 20
 
-    X = generate_dense_data(n_samples, n_features)
-    Q = generate_dense_data(n_queries, n_features, seed=123)
+    X = generate_dense_data(n_samples, n_features, cupy=cupy)
+    Q = generate_dense_data(n_queries, n_features, seed=123, cupy=cupy)
 
     # Fit model
     lsh = RPLSH(n_hash_tables=n_hash_tables, n_hashes=n_hashes, seed=seed)
@@ -119,14 +120,14 @@ def test_rplsh_save_load():
         )
 
     # Check recall
-    def query_and_get_recall(model: RPLSHModel, X: np.ndarray, Q: np.ndarray) -> float:
+    def query_and_get_recall(model: RPLSHModel, X, Q) -> float:
         candidates = model.query(Q)
         recalls = evaluate_recall_at_k(
             X,
             Q,
             candidates.get_indices(),
             candidates.get_offsets(),
-            get_top_k_fn=get_cosine_top_k,
+            get_top_k_fn=get_cosine_top_k,  # type: ignore
             k=k,
         )
         return float(np.mean(recalls))
@@ -139,3 +140,70 @@ def test_rplsh_save_load():
 
     diff = abs(mean_recall - loaded_mean_recall)
     assert diff < THRESHOLD, f"Recall difference > {THRESHOLD}: {diff:.4f}"
+
+
+@pytest.mark.parametrize("cupy", [False, True])
+def test_rplsh_fit_query_consistency(cupy):
+    """Verify fit() + query() gives same results as fit_query()"""
+    n_samples = 500
+    n_features = 100
+    n_hash_tables = 16
+    n_hashes = 8
+    seed = 42
+
+    X = generate_dense_data(n_samples, n_features, cupy=cupy)
+
+    lsh = RPLSH(n_hash_tables=n_hash_tables, n_hashes=n_hashes, seed=seed)
+
+    # fit_query
+    candidates1 = lsh.fit_query(X)
+
+    # fit + query
+    model = lsh.fit(X)
+    candidates2 = model.query(X)
+
+    np.testing.assert_array_equal(
+        candidates1.get_indices(),
+        candidates2.get_indices(),
+        err_msg="Indices differ",
+    )
+    np.testing.assert_array_equal(
+        candidates1.get_offsets(),
+        candidates2.get_offsets(),
+        err_msg="Offsets differ",
+    )
+
+
+@pytest.mark.parametrize("cupy", [False, True])
+@pytest.mark.parametrize("batch_size", [10, 50, 100])
+def test_rplsh_batched_query_consistency(cupy, batch_size):
+    """Verify batched query gives same results as non-batched query"""
+    n_samples = 500
+    n_queries = 100
+    n_features = 100
+    n_hash_tables = 16
+    n_hashes = 8
+    seed = 42
+
+    X = generate_dense_data(n_samples, n_features, cupy=cupy)
+    Q = generate_dense_data(n_queries, n_features, seed=123, cupy=cupy)
+
+    lsh = RPLSH(n_hash_tables=n_hash_tables, n_hashes=n_hashes, seed=seed)
+    model = lsh.fit(X)
+
+    # Non-batched
+    candidates1 = model.query(Q)
+
+    # Batched
+    candidates2 = model.query(Q, batch_size=batch_size)
+
+    np.testing.assert_array_equal(
+        candidates1.get_indices(),
+        candidates2.get_indices(),
+        err_msg="Indices differ",
+    )
+    np.testing.assert_array_equal(
+        candidates1.get_offsets(),
+        candidates2.get_offsets(),
+        err_msg="Offsets differ",
+    )
