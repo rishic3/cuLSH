@@ -247,7 +247,7 @@ class RPLSHModel:
 
     def save(self, path: str) -> None:
         """
-        Save the RPLSH model to a file.
+        Save the RPLSH model to an npz file.
 
         Parameters
         ----------
@@ -274,7 +274,7 @@ class RPLSHModel:
     @classmethod
     def load(cls, path: str) -> "RPLSHModel":
         """
-        Load the RPLSH model from a file.
+        Load the RPLSH model from an npz file.
 
         Parameters
         ----------

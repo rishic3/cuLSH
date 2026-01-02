@@ -319,7 +319,7 @@ class PStableLSHModel:
 
     def save(self, path: str) -> None:
         """
-        Save the PStableLSH model to a file.
+        Save the PStableLSH model to an npz file.
 
         Parameters
         ----------
@@ -348,7 +348,7 @@ class PStableLSHModel:
     @classmethod
     def load(cls, path: str) -> "PStableLSHModel":
         """
-        Load the PStableLSH model from a file.
+        Load the PStableLSH model from an npz file.
 
         Parameters
         ----------

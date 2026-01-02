@@ -1,87 +1,92 @@
-# cuLSH [WIP]
+# cuLSH
 
-Locality Sensitive Hashing on GPUs with Python bindings.
+GPU-accelerated Locality Sensitive Hashing with Python bindings.
 
-## Getting Started
+## Supported Algorithms
 
-### Installation
+| Algorithm | Class | Distance Metric | Data Type |
+|-----------|-------|-----------------|-----------|
+| Random Projection LSH | `RPLSH` | Cosine | Dense |
+| MinHash LSH | `MinHashLSH` | Jaccard | Sparse |
+| p-Stable LSH | `PStableLSH` | Euclidean | Dense |
+
+## Installation
 
 ```bash
 cd python
 pip install .
 ```
 
-### Development
+For development:
 
 ```bash
 cd python
 pip install -e .
 pip install -r requirements_dev.txt
 
-# If making C++ changes, rebuild .so
-make clean
-make [debug|release]
+# Rebuild .so after C++ changes
+make clean && make release
 ```
 
 ## Usage
 
-### Fit and Query (NumPy)
+### Basic Example
 
 ```python
 import numpy as np
-from culsh import RPLSH
+from culsh import PStableLSH
 
-X = np.random.randn(100, 128).astype(np.float32)
-Q = np.random.randn(10, 128).astype(np.float32)
+X = np.random.randn(10000, 128).astype(np.float32)
+Q = np.random.randn(100, 128).astype(np.float32)
 
-# Fit (returns RPLSHModel)
-model = RPLSH(n_hash_tables=16, n_hashes=8, seed=42).fit(X)
+# Fit (returns PStableLSHModel)
+model = PStableLSH(n_hash_tables=16, n_hashes=8, seed=42).fit(X)
 
 # Query (returns candidate neighbors)
 candidates = model.query(Q)
 
-# Get neighbors
-indices = candidates.get_indices()  # [15, 73, 14, 29, 35, ...]
-offsets = candidates.get_offsets()  # [0, 2, 9, 14, 21, ...]
-counts = candidates.get_counts()  # [2, 7, 5, 7, 8, ...]
+# Access results
+indices = candidates.get_indices()   # Candidate neighbor indices
+offsets = candidates.get_offsets()   # Start offset for each query in indices
+counts = candidates.get_counts()     # Number of candidates per query
 ```
 
-### Fit and Query (CuPy)
+### CuPy Arrays
 
 ```python
 import cupy as cp
-from culsh import RPLSH
+from culsh import PStableLSH
 
-X = cp.random.randn(100, 128).astype(cp.float32)
-Q = cp.random.randn(10, 128).astype(cp.float32)
+X = cp.random.randn(10000, 128, dtype=cp.float32)
+Q = cp.random.randn(100, 128, dtype=cp.float32)
 
-# Fit (returns RPLSHModel)
-model = RPLSH(n_hash_tables=16, n_hashes=8, seed=42).fit(X)
-
-# Query (returns candidate neighbors)
+model = PStableLSH(n_hash_tables=16, n_hashes=8).fit(X)
 candidates = model.query(Q)
 
-# Get neighbors
+# Access results as cupy arrays
 indices = candidates.get_indices(as_cupy=True)
-offsets = candidates.get_offsets(as_cupy=True)
-counts = candidates.get_counts(as_cupy=True)
+offsets = candidates.get_offsets()
 ```
 
-### Simultaneous Fit + Query
+### Sparse Data (MinHash)
 
 ```python
-import numpy as np
-from culsh import RPLSH
+import scipy.sparse
+from culsh import MinHashLSH
 
-X = np.random.randn(100, 128).astype(np.float32)
+X = scipy.sparse.random(10000, 5000, density=0.01, format='csr')
+Q = scipy.sparse.random(100, 5000, density=0.01, format='csr')
 
-# Fit + Query
-candidates = RPLSH(n_hash_tables=16, n_hashes=8, seed=42).fit_query(X)
+model = MinHashLSH(n_hash_tables=32, n_hashes=4).fit(X)
+candidates = model.query(Q)
+```
 
-# Get neighbors
-indices = candidates.get_indices()
-offsets = candidates.get_offsets()
-counts = candidates.get_counts()
+### Simultaneous Fit and Query
+
+When querying the same data used for fitting:
+
+```python
+candidates = PStableLSH(n_hash_tables=16, n_hashes=8).fit_query(X)
 ```
 
 ### Batched Queries
@@ -89,6 +94,16 @@ counts = candidates.get_counts()
 For large query sets, use `batch_size` to reduce peak GPU memory:
 
 ```python
-# Backend processes queries in batches of 100
-candidates = model.query(Q, batch_size=100)
+candidates = model.query(Q, batch_size=1000)
+```
+
+### Save and Load
+
+```python
+# Save fitted model
+model.save("model.npz")
+
+# Load model
+from culsh import PStableLSHModel
+model = PStableLSHModel.load("model.npz")
 ```

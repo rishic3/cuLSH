@@ -229,7 +229,7 @@ class MinHashLSHModel:
 
     def save(self, path: str) -> None:
         """
-        Save the MinHashLSH model to a file.
+        Save the MinHashLSH model to an npz file.
 
         Parameters
         ----------
@@ -256,7 +256,7 @@ class MinHashLSHModel:
     @classmethod
     def load(cls, path: str) -> "MinHashLSHModel":
         """
-        Load the MinHashLSH model from a file.
+        Load the MinHashLSH model from an npz file.
 
         Parameters
         ----------
