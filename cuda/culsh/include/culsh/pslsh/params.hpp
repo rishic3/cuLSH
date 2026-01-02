@@ -7,7 +7,7 @@ namespace culsh {
 /**
  * @brief p-Stable LSH parameters
  */
-struct PStableLSHParams {
+struct PSLSHParams {
     /**
      * @brief The number of hash tables. This parameter corresponds to an OR-amplification of
      * the locality-sensitive family. A higher value increases the probability of finding

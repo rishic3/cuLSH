@@ -21,6 +21,7 @@ struct Index {
      * @brief Device pointer to flat sorted array of all bucket signatures for each hash tables.
      * Bucket signatures for each hash table stored contiguously starting at table_start_indices[i].
      * Signatures are stored as opaque bytes, where signature size is given by sig_nbytes.
+     * Typed as uint8_t for pointer arithmetic.
      * Size: [n_total_buckets * sig_nbytes]
      */
     uint8_t* all_bucket_signatures = nullptr;

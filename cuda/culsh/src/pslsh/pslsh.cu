@@ -16,7 +16,7 @@ namespace pslsh {
 using Candidates = core::Candidates;
 
 Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int n_samples,
-          int n_features, const PStableLSHParams& params) {
+          int n_features, const PSLSHParams& params) {
     // Allocate projections/biases
     size_t P_size = static_cast<size_t>(params.n_hash_tables) * params.n_hashes * n_features;
     float* P = nullptr;
@@ -53,7 +53,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int
 }
 
 Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, int n_samples,
-          int n_features, const PStableLSHParams& params) {
+          int n_features, const PSLSHParams& params) {
     // Allocate projections/biases
     size_t P_size = static_cast<size_t>(params.n_hash_tables) * params.n_hashes * n_features;
     double* P = nullptr;
@@ -136,7 +136,7 @@ Candidates query(cublasHandle_t cublas_handle, cudaStream_t stream, const double
 }
 
 Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X,
-                     int n_samples, int n_features, const PStableLSHParams& params) {
+                     int n_samples, int n_features, const PSLSHParams& params) {
     // Allocate projections/biases
     size_t P_size = static_cast<size_t>(params.n_hash_tables) * params.n_hashes * n_features;
     float* P = nullptr;
@@ -169,7 +169,7 @@ Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const fl
 }
 
 Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X,
-                     int n_samples, int n_features, const PStableLSHParams& params) {
+                     int n_samples, int n_features, const PSLSHParams& params) {
     // Allocate projections/biases
     size_t P_size = static_cast<size_t>(params.n_hash_tables) * params.n_hashes * n_features;
     double* P = nullptr;

@@ -43,6 +43,7 @@ pybind11_add_module(_culsh_core
     csrc/bindings.cu
     ${CUDA_LIB_DIR}/culsh/src/rplsh/rplsh.cu
     ${CUDA_LIB_DIR}/culsh/src/minhash/minhash.cu
+    ${CUDA_LIB_DIR}/culsh/src/pslsh/pslsh.cu
 )
 
 # Include directories

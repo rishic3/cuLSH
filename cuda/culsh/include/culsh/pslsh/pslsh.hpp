@@ -27,7 +27,7 @@ using Candidates = core::Candidates;
  * @return Index containing hash tables and projection matrix
  */
 Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int n_samples,
-          int n_features, const PStableLSHParams& params);
+          int n_features, const PSLSHParams& params);
 
 /**
  * @brief Fit the p-Stable LSH index (double precision)
@@ -41,7 +41,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int
  * @return Index containing hash tables and projection matrix
  */
 Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, int n_samples,
-          int n_features, const PStableLSHParams& params);
+          int n_features, const PSLSHParams& params);
 
 /**
  * @brief Query the p-Stable LSH index for candidate neighbor indices
@@ -81,7 +81,7 @@ Candidates query(cublasHandle_t cublas_handle, cudaStream_t stream, const double
  * @return Candidates containing candidate indices for each query
  */
 Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X,
-                     int n_samples, int n_features, const PStableLSHParams& params);
+                     int n_samples, int n_features, const PSLSHParams& params);
 
 /**
  * @brief Simultaneously fit and query the p-Stable LSH index (double precision)
@@ -95,7 +95,7 @@ Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const fl
  * @return Candidates containing candidate indices for each query
  */
 Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X,
-                     int n_samples, int n_features, const PStableLSHParams& params);
+                     int n_samples, int n_features, const PSLSHParams& params);
 
 /**
  * @brief Query the p-Stable LSH index in batches
