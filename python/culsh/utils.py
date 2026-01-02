@@ -2,6 +2,7 @@
 Utility functions.
 """
 
+import logging
 import random
 from typing import Optional, Union
 
@@ -64,3 +65,16 @@ def compute_recall(
     else:
         intersection = np.intersect1d(lsh_indices, gt_indices)
     return len(intersection) / len(gt_indices)
+
+
+def get_logger(instance: object) -> logging.Logger:
+    """Get a logger for the class instance."""
+    logger = logging.getLogger(instance.__class__.__name__)
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s [%(name)s] %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger

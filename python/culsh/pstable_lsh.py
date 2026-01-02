@@ -8,7 +8,7 @@ import cupy as cp
 import numpy as np
 
 from culsh._culsh_core import Candidates, PSLSHCore, PSLSHIndex
-from culsh.utils import ensure_device_array, get_array_info, resolve_seed
+from culsh.utils import ensure_device_array, get_array_info, get_logger, resolve_seed
 
 
 class PStableLSH:
@@ -76,6 +76,7 @@ class PStableLSH:
         self._n_hashes = n_hashes
         self._window_size: Union[int, Literal["auto"]] = window_size
         self._seed = resolve_seed(seed)
+        self._logger = get_logger(self)
 
     @property
     def n_hash_tables(self) -> int:
@@ -118,6 +119,7 @@ class PStableLSH:
         else:
             window_size = self._window_size
 
+        self._logger.info(f"Using estimated window size: {window_size}")
         X = ensure_device_array(X)
 
         core = PSLSHCore(self._n_hash_tables, self._n_hashes, window_size, self._seed)
@@ -188,7 +190,7 @@ class PStableLSH:
     @staticmethod
     def _estimate_window_size(
         X: Union[np.ndarray, cp.ndarray],
-        scale_factor: float = 2.0,
+        scale_factor: float = 1.0,
         max_samples: int = 10000,
     ) -> int:
         """

@@ -164,7 +164,12 @@ class LSHBenchmark(ABC):
         queries_with_candidates = 0
 
         recall_at_k = {k: [] for k in recall_k_values}
-        for i in tqdm(range(n_eval), desc="Evaluating recall", ncols=100):
+        for i in tqdm(
+            range(n_eval),
+            desc="Evaluating recall",
+            ncols=100,
+            disable=not self.args.verbose,
+        ):
             # Slice candidates for this query
             start, end = int(offsets[i]), int(offsets[i + 1])
             lsh_indices = indices[start:end]
