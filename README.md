@@ -13,7 +13,7 @@ It provides a scikit-learn-like fit/query API for fully managed index building a
 
 ## Installation
 
-**Prerequisites:** [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) (11.8+), [CMake](https://cmake.org/download/) (3.18+), C++17 compiler.
+**Prerequisites:** [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) (11.8+), [CMake](https://cmake.org/download/) (3.24+), C++17 compiler.
 
 ```bash
 git clone https://github.com/rishic3/cuLSH.git

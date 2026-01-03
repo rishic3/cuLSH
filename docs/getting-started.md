@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) (11.8+)
-- [CMake](https://cmake.org/download/) (3.18+)
+- [CMake](https://cmake.org/download/) (3.24+)
 - C++17 compiler
 
 ## Installation
