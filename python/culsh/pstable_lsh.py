@@ -113,14 +113,13 @@ class PStableLSH:
             The fitted model containing the LSH index.
         """
         n_samples, n_features, dtype = get_array_info(X)
+        X = ensure_device_array(X)
 
         if self._window_size == "auto":
             window_size = self._estimate_window_size(X)
+            self._logger.info(f"Using estimated window size: {window_size}")
         else:
             window_size = self._window_size
-
-        self._logger.info(f"Using estimated window size: {window_size}")
-        X = ensure_device_array(X)
 
         core = PSLSHCore(self._n_hash_tables, self._n_hashes, window_size, self._seed)
 
@@ -170,13 +169,13 @@ class PStableLSH:
             return model.query(X, batch_size=batch_size)
 
         n_samples, n_features, dtype = get_array_info(X)
+        X = ensure_device_array(X)
 
         if self._window_size == "auto":
             window_size = self._estimate_window_size(X)
+            self._logger.info(f"Using estimated window size: {window_size}")
         else:
             window_size = self._window_size
-
-        X = ensure_device_array(X)
 
         core = PSLSHCore(self._n_hash_tables, self._n_hashes, window_size, self._seed)
 
@@ -191,7 +190,7 @@ class PStableLSH:
 
     @staticmethod
     def _estimate_window_size(
-        X: Union[np.ndarray, cp.ndarray],
+        X: cp.ndarray,
         scale_factor: float = 1.0,
         max_samples: int = 10000,
     ) -> int:
@@ -202,7 +201,7 @@ class PStableLSH:
         Parameters
         ----------
         X : array-like
-            Input data (numpy or cupy).
+            Input data (cupy).
         scale_factor : float
             Divisor for mean magnitude. Smaller values = larger window = more collisions.
         max_samples : int
@@ -213,16 +212,14 @@ class PStableLSH:
         int
             Estimated window size (minimum 1).
         """
-        xp = cp if isinstance(X, cp.ndarray) else np
-
         n_samples = len(X)
         if n_samples > max_samples:
-            indices = xp.random.choice(n_samples, max_samples, replace=False)
+            indices = cp.random.choice(n_samples, max_samples, replace=False)
             X_sample = X[indices]
         else:
             X_sample = X
 
-        mean_magnitude = float(xp.linalg.norm(X_sample, axis=1).mean())
+        mean_magnitude = float(cp.linalg.norm(X_sample, axis=1).mean())
         return max(1, int(mean_magnitude / scale_factor))
 
 
