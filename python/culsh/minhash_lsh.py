@@ -125,8 +125,9 @@ class MinHashLSH:
     ) -> Candidates:
         """
         Simultaneously fit and query the LSH index. This is more efficient than
-        calling fit() followed by query() when querying the same data used for fitting.
-        Note: input vectors are considered candidate neighbors of themselves.
+        calling fit(X) followed by query(X) because it avoids a search step to
+        find matching buckets. Note: input vectors are considered candidate neighbors
+        of themselves.
 
         Parameters
         ----------

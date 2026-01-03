@@ -147,8 +147,9 @@ class PStableLSH:
     ) -> Candidates:
         """
         Simultaneously fit and query the LSH index. This is more efficient than
-        calling fit() followed by query() when querying the same data used for fitting.
-        Note: input vectors are considered candidate neighbors of themselves.
+        calling fit(X) followed by query(X) because it avoids a search step to
+        find matching buckets. Note: input vectors are considered candidate neighbors
+        of themselves.
 
         Parameters
         ----------
@@ -156,8 +157,8 @@ class PStableLSH:
             Input vectors to fit and query. Can be numpy or cupy array.
         batch_size : int, optional
             If specified, process queries in batches of this size to reduce
-            peak memory usage. Note that this will fall back to calling fit()
-            followed by query() with batching.
+            peak memory usage. Note that this will fall back to calling fit(X)
+            followed by query(X) with batching.
 
         Returns
         -------
