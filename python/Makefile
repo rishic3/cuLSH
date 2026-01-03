@@ -16,6 +16,7 @@ help:
 
 stubs:
 	@$(PYTHON) scripts/generate_stubs.py
+	./run_format.sh
 
 release: $(BUILD_DIR_RELEASE)/Makefile
 	@cd $(BUILD_DIR_RELEASE) && $(MAKE) -j$(shell nproc)
