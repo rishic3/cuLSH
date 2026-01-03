@@ -77,7 +77,7 @@ X = scipy.sparse.random(10000, 5000, density=0.01, format='csr')
 Q = scipy.sparse.random(100, 5000, density=0.01, format='csr')
 # Or use cupy:
 # X = cupyx.scipy.sparse.random(10000, 5000, density=0.01, format='csr')
-# Q = cupyx.sparse.random(100, 5000, density=0.01, format='csr')
+# Q = cupyx.scipy.sparse.random(100, 5000, density=0.01, format='csr')
 
 model = MinHashLSH(n_hash_tables=32, n_hashes=4).fit(X)
 candidates = model.query(Q)
