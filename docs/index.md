@@ -2,7 +2,7 @@
 
 **GPU-accelerated Locality Sensitive Hashing**
 
-cuLSH provides a scikit-learn-style fit/query API for building and querying LSH indices on the GPU.
+cuLSH is a library for ANN-search using LSH.
 
 ## Supported Algorithms
 
