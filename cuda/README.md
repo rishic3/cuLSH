@@ -16,17 +16,17 @@ Computationally, LSH algorithms differ only in how they compute the signature ma
 ```text
 X_sig: (n_hash_tables × n_samples × n_hashes)
 
-Memory: [ ---------- Table 0 ---------- | ---------- Table 1 ---------- | ... ]
+[ ---------- Table 0 ---------- | ---------- Table 1 ---------- | ... ]
 
-        ┌──────────────────────────────────────────────────────────────┐
-        │  Table 0                      │  Table 1                     │
-        │  ┌─────────────────────────┐  │  ┌─────────────────────────┐ │
-        │  │ sample 0: [h0 h1 h2 h3] │  │  │ sample 0: [h0 h1 h2 h3] │ │
-        │  │ sample 1: [h0 h1 h2 h3] │  │  │ sample 1: [h0 h1 h2 h3] │ │
-        │  │ sample 2: [h0 h1 h2 h3] │  │  │ sample 2: [h0 h1 h2 h3] │ │
-        │  │ ...                     │  │  │ ...                     │ │
-        │  └─────────────────────────┘  │  └─────────────────────────┘ │
-        └──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Table 0                      │  Table 1                     │
+│  ┌─────────────────────────┐  │  ┌─────────────────────────┐ │
+│  │ sample 0: [h0 h1 h2 h3] │  │  │ sample 0: [h0 h1 h2 h3] │ │
+│  │ sample 1: [h0 h1 h2 h3] │  │  │ sample 1: [h0 h1 h2 h3] │ │
+│  │ sample 2: [h0 h1 h2 h3] │  │  │ sample 2: [h0 h1 h2 h3] │ │
+│  │ ...                     │  │  │ ...                     │ │
+│  └─────────────────────────┘  │  └─────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 Once `X_sig`/`Q_sig` is computed by the algorithm-specific hashing kernel(s), building the index and querying the index is identical across algorithms. The `core/` directory contains these common kernels. 
