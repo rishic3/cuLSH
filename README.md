@@ -1,6 +1,7 @@
 # cuLSH
 
-GPU-accelerated Locality Sensitive Hashing with Python bindings.
+cuLSH is a GPU-accelerated locality-sensitive hashing library.
+It provides a scikit-learn-like fit/transform API for fully managed index building and querying.
 
 ## Supported Algorithms
 
@@ -30,12 +31,13 @@ make clean && make release
 
 ## Usage
 
-### Basic Example
+### Numpy Example
 
 ```python
 import numpy as np
 from culsh import PStableLSH
 
+# Numpy inputs
 X = np.random.randn(10000, 128).astype(np.float32)
 Q = np.random.randn(100, 128).astype(np.float32)
 
@@ -51,12 +53,13 @@ offsets = candidates.get_offsets()   # Start offset for each query in indices
 counts = candidates.get_counts()     # Number of candidates per query
 ```
 
-### CuPy Arrays
+### Cupy Example
 
 ```python
 import cupy as cp
 from culsh import PStableLSH
 
+# Cupy inputs
 X = cp.random.randn(10000, 128, dtype=cp.float32)
 Q = cp.random.randn(100, 128, dtype=cp.float32)
 
@@ -65,17 +68,21 @@ candidates = model.query(Q)
 
 # Access results as cupy arrays
 indices = candidates.get_indices(as_cupy=True)
-offsets = candidates.get_offsets()
+offsets = candidates.get_offsets(as_cupy=True)
 ```
 
-### Sparse Data (MinHash)
+### Sparse Data
 
 ```python
-import scipy.sparse
+import scipy.sparse  
+# import cupyx.scipy.sparse
 from culsh import MinHashLSH
 
 X = scipy.sparse.random(10000, 5000, density=0.01, format='csr')
 Q = scipy.sparse.random(100, 5000, density=0.01, format='csr')
+# Or use cupy:
+# X = cupyx.scipy.sparse.random(10000, 5000, density=0.01, format='csr')
+# Q = cupyx.sparse.random(100, 5000, density=0.01, format='csr')
 
 model = MinHashLSH(n_hash_tables=32, n_hashes=4).fit(X)
 candidates = model.query(Q)
@@ -83,7 +90,7 @@ candidates = model.query(Q)
 
 ### Simultaneous Fit and Query
 
-When querying the same data used for fitting:
+Query the same data used for fitting:
 
 ```python
 candidates = PStableLSH(n_hash_tables=16, n_hashes=8).fit_query(X)
