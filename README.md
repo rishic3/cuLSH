@@ -1,7 +1,7 @@
 # cuLSH
 
 cuLSH is a GPU-accelerated locality-sensitive hashing library.
-It provides a scikit-learn-like fit/transform API for fully managed index building and querying.
+It provides a scikit-learn-like fit/query API for fully managed index building and querying.
 
 ## Supported Algorithms
 
@@ -13,13 +13,15 @@ It provides a scikit-learn-like fit/transform API for fully managed index buildi
 
 ## Installation
 
+**Prerequisites:** [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) (11.8+), [CMake](https://cmake.org/download/) (3.18+), C++17 compiler.
+
 ```bash
 git clone https://github.com/rishic3/cuLSH.git
 cd cuLSH/python
 pip install .
 ```
 
-For development:
+**For development:**
 
 ```bash
 pip install -e .

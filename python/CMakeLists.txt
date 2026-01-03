@@ -1,18 +1,15 @@
 cmake_minimum_required(VERSION 3.18)
-
-set(CMAKE_C_COMPILER "/usr/bin/gcc-12")
-set(CMAKE_CXX_COMPILER "/usr/bin/g++-12")
-set(CMAKE_CUDA_HOST_COMPILER "/usr/bin/g++-12")
-
 project(culsh_python LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find required packages
 find_package(CUDAToolkit REQUIRED)
+message(STATUS "Found CUDA ${CUDAToolkit_VERSION} at ${CUDAToolkit_LIBRARY_DIR}")
 find_package(Python REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 CONFIG QUIET)
 
@@ -27,12 +24,14 @@ if(NOT pybind11_FOUND)
     if(pybind11_RESULT EQUAL 0)
         find_package(pybind11 CONFIG REQUIRED PATHS ${pybind11_DIR})
     else()
-        message(FATAL_ERROR "pybind11 not found")
+        message(FATAL_ERROR "pybind11 not found. Install with: pip install pybind11")
     endif()
 endif()
 
-# CUDA architectures
-set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89;90")
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES "native")
+endif()
+message(STATUS "Building for CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda")
 
 # Path to CUDA library source
