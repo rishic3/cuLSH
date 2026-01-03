@@ -132,8 +132,9 @@ class RPLSH:
         X : array-like of shape (n_samples, n_features)
             Input vectors to fit and query. Can be numpy or cupy array.
         batch_size : int, optional
-            If specified, falls back to fit() + query() with batching to reduce
-            peak memory usage.
+            If specified, process queries in batches of this size to reduce
+            peak memory usage. Note that this will fall back to calling fit()
+            followed by query() with batching.
 
         Returns
         -------

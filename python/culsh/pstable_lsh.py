@@ -34,7 +34,7 @@ class PStableLSH:
         The quantization width for projections. Determines the resolution of the hash function
         by defining the physical size of the hash buckets. Larger window size increases the
         base collision probability. If "auto", the window size is estimated from data magnitude
-        during fit() by sampling vectors and computing mean_magnitude / 2.
+        during fit() by sampling vectors and computing mean magnitude.
     seed : int, optional
         Random seed for reproducible hashes. If None (default), a random seed is used.
 
@@ -155,8 +155,9 @@ class PStableLSH:
         X : array-like of shape (n_samples, n_features)
             Input vectors to fit and query. Can be numpy or cupy array.
         batch_size : int, optional
-            If specified, falls back to fit() + query() with batching to reduce
-            peak memory usage.
+            If specified, process queries in batches of this size to reduce
+            peak memory usage. Note that this will fall back to calling fit()
+            followed by query() with batching.
 
         Returns
         -------
