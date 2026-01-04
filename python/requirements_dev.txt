@@ -8,3 +8,5 @@ ruff
 mkdocs
 mkdocs-material
 mkdocstrings[python]
+faiss-cpu
+matplotlib

@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from bench_base import LSHBenchmark
+from bench_base import LSHBenchmark, logger
+from faiss_wrapper import FaissLSHWrapper
 
 from culsh import RPLSH
 
@@ -13,9 +14,22 @@ class RPLSHBenchmark(LSHBenchmark):
 
     @property
     def algorithm_name(self) -> str:
-        return "RPLSH"
+        if self.args and self.args.cpu:
+            return "RPLSH-CPU"
+        return "RPLSH-GPU"
 
     def add_algorithm_args(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "--cpu",
+            action="store_true",
+            help="Use FAISS (CPU) instead of cuLSH (GPU)",
+        )
+        parser.add_argument(
+            "--n-candidates",
+            type=int,
+            default=1000,
+            help="Number of candidates for FAISS to return (CPU mode only)",
+        )
         parser.add_argument(
             "--dtype",
             type=str,
@@ -31,13 +45,22 @@ class RPLSHBenchmark(LSHBenchmark):
         Q = self.read_fvecs(data_dir / "sift_query.fvecs", self.args.dtype)
         return X, Q
 
-    def create_lsh(self) -> RPLSH:
+    def create_lsh(self) -> RPLSH | FaissLSHWrapper:
         assert self.args is not None
-        return RPLSH(
-            n_hash_tables=self.args.n_hash_tables,
-            n_hashes=self.args.n_hashes,
-            seed=self.args.seed,
-        )
+        if self.args.cpu:
+            logger.info("Using FAISS IndexLSH (CPU)")
+            return FaissLSHWrapper(
+                n_hash_tables=self.args.n_hash_tables,
+                n_hashes=self.args.n_hashes,
+                n_candidates=self.args.n_candidates,
+            )
+        else:
+            logger.info("Using cuLSH (GPU)")
+            return RPLSH(
+                n_hash_tables=self.args.n_hash_tables,
+                n_hashes=self.args.n_hashes,
+                seed=self.args.seed,
+            )
 
     def get_ground_truth_top_k(self, X_train, Q_test, query_idx: int, k: int):
         """Get top-k by cosine similarity."""

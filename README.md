@@ -116,3 +116,17 @@ model.save("model.npz")
 from culsh import PStableLSHModel
 model = PStableLSHModel.load("model.npz")
 ```
+
+## Benchmarks
+
+Benchmark results (log-scale):
+
+![Benchmark Results](python/benchmark/images/rplsh_vs_faiss_sift_nt32_nh16_nq10k.png)
+
+**Dataset:** SIFT1M 1M training vectors, 10k query vectors, 128 dimensions.
+
+**Algorithm:** RPLSH (GPU), FAISS IndexLSH (CPU). 32 hash tables × 16 hashes.
+
+**Hardware:** NVIDIA RTX A6000 (GPU), Intel Core i9-14900K w/AVX2 (CPU).
+
+> **Note:** cuLSH uses bucket-based retrieval (returns all bucket matches), while FAISS IndexLSH uses hash-then-scan (computes Hamming distance to all vectors and returns top-k). FAISS k param was set to match mean candidates returned by cuLSH.

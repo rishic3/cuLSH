@@ -244,9 +244,9 @@ class LSHBenchmark(ABC):
             logger.info(
                 f"Running fit_query() on {X_train.shape[0]} samples{batch_msg}..."
             )
-            start_time = time.time()
+            start_time = time.perf_counter()
             candidates = self._call_fit_query(lsh, X_train)
-            fit_query_time = time.time() - start_time
+            fit_query_time = time.perf_counter() - start_time
             logger.info(f"fit_query() completed in {fit_query_time:.2f}s")
 
             fit_time = fit_query_time
@@ -254,9 +254,9 @@ class LSHBenchmark(ABC):
         else:
             X_train = X
             logger.info(f"Running fit() on {X_train.shape[0]} samples...")
-            start_time = time.time()
+            start_time = time.perf_counter()
             model = lsh.fit(X_train)
-            fit_time = time.time() - start_time
+            fit_time = time.perf_counter() - start_time
             logger.info(f"fit() completed in {fit_time:.2f}s")
 
             logger.debug(f"Index size: {model.index.size_bytes() / 1024**3:.2f} GB")
@@ -266,9 +266,9 @@ class LSHBenchmark(ABC):
                 f" (batch_size={self.args.batch_size})" if self.args.batch_size else ""
             )
             logger.info(f"Running query() on {Q_test.shape[0]} queries{batch_msg}...")
-            start_time = time.time()
+            start_time = time.perf_counter()
             candidates = self._call_query(model, Q_test)
-            query_time = time.time() - start_time
+            query_time = time.perf_counter() - start_time
             logger.info(f"query() completed in {query_time:.2f}s")
 
         logger.info(
