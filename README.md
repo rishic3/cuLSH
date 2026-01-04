@@ -129,4 +129,4 @@ Benchmark results (log-scale):
 
 **Hardware:** NVIDIA RTX A6000 (GPU), Intel Core i9-14900K w/AVX2 (CPU).
 
-> **Note:** cuLSH uses bucket-based retrieval (returns all bucket matches), while FAISS IndexLSH uses hash-then-scan (computes Hamming distance to all vectors and returns top-k). The top-k value for FAISS was set to match mean candidates returned by cuLSH for a comparison at equal output sizes. Comparison of recall, however, doesn't exactly sense here given the algorithmic differences.
+> **Note:** cuLSH uses bucket-based retrieval (returns all bucket matches), while FAISS IndexLSH uses hash-then-scan (computes Hamming distance to all vectors and returns top-k). The top-k value for FAISS was set to match mean candidates returned by cuLSH for a comparison at equal output sizes. 
