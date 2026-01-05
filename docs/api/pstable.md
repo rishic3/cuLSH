@@ -1,6 +1,6 @@
 # PStableLSH
 
-p-Stable LSH for approximate nearest neighbor search using **Euclidean distance**.
+p-Stable LSH for approximate nearest neighbor search under **Euclidean distance**.
 
 ## Classes
 

@@ -125,8 +125,8 @@ Benchmark results (log-scale):
 
 **Dataset:** SIFT1M 1M training vectors, 10k query vectors, 128 dimensions.
 
-**Algorithm:** RPLSH (GPU), FAISS IndexLSH (CPU). 32 hash tables × 16 hashes.
+**Algorithm:** [RPLSH](https://rishic3.github.io/cuLSH/api/rplsh/) (GPU), FAISS [IndexLSH](https://github.com/facebookresearch/faiss/wiki/Faiss-indexes/1f721de164ae7950c65914d2dde0865312584a36#indexlsh-and-its-relationship-with-cell-probe-methods) (CPU). 32 hash tables × 16 hashes.
 
 **Hardware:** NVIDIA RTX A6000 (GPU), Intel Core i9-14900K w/AVX2 (CPU).
 
-> **Note:** cuLSH uses bucket-based retrieval (returns all bucket matches), while FAISS IndexLSH uses hash-then-scan (computes Hamming distance to all vectors and returns top-k). The top-k value for FAISS was set to match mean candidates returned by cuLSH for a comparison at equal output sizes. 
+> **Note:** cuLSH uses bucket-based retrieval (returns all bucket matches), while FAISS IndexLSH uses hash-then-scan (computes Hamming distance to all vectors and returns top-k). The top-k value for FAISS was set to match mean candidates returned by cuLSH for a comparison at equal output sizes.

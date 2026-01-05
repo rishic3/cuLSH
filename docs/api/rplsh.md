@@ -1,6 +1,6 @@
 # RPLSH
 
-Random Projection LSH for approximate nearest neighbor search using **cosine similarity**.
+Random Projection LSH for approximate nearest neighbor search under **cosine similarity**.
 
 ## Classes
 

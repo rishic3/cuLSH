@@ -1,6 +1,6 @@
 # MinHashLSH
 
-MinHash LSH for approximate nearest neighbor search using **Jaccard similarity** on sparse/binary data.
+MinHash LSH for approximate nearest neighbor search under **Jaccard similarity** on sparse/binary data.
 
 ## Classes
 
