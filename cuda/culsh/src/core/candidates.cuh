@@ -194,5 +194,90 @@ inline void Candidates::merge(cudaStream_t stream, Candidates&& other) {
     n_total_candidates = new_n_total;
 }
 
+/**
+ * @brief GPU candidates results refined to top-k based on ground-truth distance
+ */
+struct RefinedCandidates {
+    /**
+     * @brief Device pointer to array of candidate indices for all queries.
+     * Candidates for query i stored contiguously starting at query_candidate_indices[i * k].
+     * Size: [k * n_queries]
+     */
+    int* query_candidate_indices = nullptr;
+
+    /**
+     * @brief Metadata
+     */
+    int n_queries = 0;
+    int k = 0;
+
+    /**
+     * @brief Default constructor
+     */
+    RefinedCandidates(): query_candidate_indices(nullptr) {}
+
+    /**
+     * @brief Destructor
+     */
+    ~RefinedCandidates() { free(); }
+
+    /**
+     * @brief Move constructor
+     */
+    RefinedCandidates(RefinedCandidates&& other) noexcept
+        : query_candidate_indices(other.query_candidate_indices),
+        n_queries(other.n_queries), k(other.k) {
+
+        other.query_candidate_indices = nullptr;
+        other.n_queries = 0;
+        other.k = 0;
+    }
+
+    /**
+     * @brief Move assignment operator
+     */
+    RefinedCandidates& operator=(RefinedCandidates&& other) noexcept {
+        if (this != &other) {
+            free();
+
+            query_candidate_indices = other.query_candidate_indices;
+            n_queries = other.n_queries;
+            k = other.k;
+
+            other.query_candidate_indices = nullptr;
+            other.n_queries = 0;
+            other.k = 0;
+        }
+        return *this;
+    }
+
+    /**
+     * @brief Delete copy constructor
+     */
+    RefinedCandidates(const RefinedCandidates&) = delete;
+
+    /**
+     * @brief Delete copy assignment operator
+     */
+    RefinedCandidates& operator=(const RefinedCandidates&) = delete;
+
+    /**
+     * @brief Check empty
+     */
+    bool empty() const { return query_candidate_indices == nullptr; }
+
+    /**
+     * @brief Free device memory
+     */
+    void free() {
+        if (query_candidate_indices) {
+            cudaFree(query_candidate_indices);
+            query_candidate_indices = nullptr;
+        }
+        n_queries = 0;
+        k = 0;
+    }
+};
+
 } // namespace core
 } // namespace culsh
