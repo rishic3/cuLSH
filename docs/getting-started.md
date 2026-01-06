@@ -9,8 +9,15 @@
 ## Installation
 
 ```bash
+# Clone the repo
 git clone https://github.com/rishic3/cuLSH.git
 cd cuLSH/python
+
+# Create a conda env
+conda create -n python=3.12 culsh -y
+conda activate culsh
+
+# Install the package
 pip install .
 ```
 
