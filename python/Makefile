@@ -28,6 +28,7 @@ $(BUILD_DIR_RELEASE)/Makefile: CMakeLists.txt
 	@mkdir -p $(BUILD_DIR_RELEASE)
 	@cd $(BUILD_DIR_RELEASE) && cmake -DCMAKE_BUILD_TYPE=Release \
 		-DPython_EXECUTABLE=$(shell which $(PYTHON)) \
+		-Dpybind11_DIR=$(shell $(PYTHON) -m pybind11 --cmakedir) \
 		-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$(OUTPUT_DIR) \
 		..
 
@@ -35,6 +36,7 @@ $(BUILD_DIR_DEBUG)/Makefile: CMakeLists.txt
 	@mkdir -p $(BUILD_DIR_DEBUG)
 	@cd $(BUILD_DIR_DEBUG) && cmake -DCMAKE_BUILD_TYPE=Debug \
 		-DPython_EXECUTABLE=$(shell which $(PYTHON)) \
+		-Dpybind11_DIR=$(shell $(PYTHON) -m pybind11 --cmakedir) \
 		-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$(OUTPUT_DIR) \
 		..
 

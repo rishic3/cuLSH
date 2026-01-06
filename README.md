@@ -15,9 +15,15 @@ It provides a scikit-learn-like `fit`/`query` API for index building and queryin
 
 **Prerequisites:** [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) (11.8+), [CMake](https://cmake.org/download/) (3.24+), C++17 compiler.
 
+We recommend installing in a conda environment:
+
 ```bash
 git clone https://github.com/rishic3/cuLSH.git
 cd cuLSH/python
+
+conda create -n python=3.12 culsh -y
+conda activate culsh
+
 pip install .
 ```
 
