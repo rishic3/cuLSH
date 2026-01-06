@@ -1,0 +1,45 @@
+# Build artifacts
+build/
+cuda/_build/
+cuda/build/
+python/_build_*/
+python/culsh.egg-info/
+python/culsh/_culsh_core*.so
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data and results
+data/
+python/benchmark/data/
+python/benchmark/results/
+python/benchmark/images/
+cuda/results/
+
+# Documentation site
+site/
+docs/
+
+# Notebooks
+notebooks/
+
+# Git
+.git/
+.gitignore
+
+# Misc
+*.log
+out.txt
+*.so
+LICENSE
+README.md
+mkdocs.yml
