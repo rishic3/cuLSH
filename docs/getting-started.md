@@ -31,6 +31,24 @@ pip install -r requirements_dev.txt
 make clean && make release
 ```
 
+### Docker
+
+Alternatively, run cuLSH in a container with GPU support:
+
+```bash
+docker build -t culsh .
+docker run --gpus all -it culsh
+```
+
+Mount a local data directory:
+
+```bash
+docker run --gpus all -it -v $(pwd)/data:/app/data culsh
+```
+
+!!! note
+    Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) for GPU support.
+
 ## Basic Usage
 
 ### Numpy Example
