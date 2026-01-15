@@ -160,20 +160,21 @@ inline void Candidates::merge(cudaStream_t stream, Candidates&& other) {
     CUDA_CHECK_ALLOC(cudaMalloc(&new_offsets, (new_n_queries + 1) * sizeof(size_t)));
 
     // Copy indices
-    CUDA_CHECK(cudaMemcpyAsync(new_indices, query_candidate_indices, n_total_candidates * sizeof(int),
-                    cudaMemcpyDeviceToDevice, stream));
+    CUDA_CHECK(cudaMemcpyAsync(new_indices, query_candidate_indices,
+                               n_total_candidates * sizeof(int), cudaMemcpyDeviceToDevice, stream));
     CUDA_CHECK(cudaMemcpyAsync(new_indices + n_total_candidates, other.query_candidate_indices,
-                    other.n_total_candidates * sizeof(int), cudaMemcpyDeviceToDevice, stream));
+                               other.n_total_candidates * sizeof(int), cudaMemcpyDeviceToDevice,
+                               stream));
 
     // Copy counts
     CUDA_CHECK(cudaMemcpyAsync(new_counts, query_candidate_counts, n_queries * sizeof(size_t),
-                    cudaMemcpyDeviceToDevice, stream));
+                               cudaMemcpyDeviceToDevice, stream));
     CUDA_CHECK(cudaMemcpyAsync(new_counts + n_queries, other.query_candidate_counts,
-                    other.n_queries * sizeof(size_t), cudaMemcpyDeviceToDevice, stream));
+                               other.n_queries * sizeof(size_t), cudaMemcpyDeviceToDevice, stream));
 
     // Copy this's offsets
-    CUDA_CHECK(cudaMemcpyAsync(new_offsets, query_candidate_offsets, (n_queries + 1) * sizeof(size_t),
-                    cudaMemcpyDeviceToDevice, stream));
+    CUDA_CHECK(cudaMemcpyAsync(new_offsets, query_candidate_offsets,
+                               (n_queries + 1) * sizeof(size_t), cudaMemcpyDeviceToDevice, stream));
 
     // Copy other's offsets and add base offset (n_total_candidates)
     // Ignore first offset since it is always 0
