@@ -66,9 +66,12 @@ void generate_hash_integers(cudaStream_t stream, int n, uint64_t seed, uint32_t*
  * @param[in] n_hashes Number of hashes per table
  * @param[out] X_sig Table-major minhash signatures (n_hash_tables x n_samples x n_hashes)
  */
-__global__ void compute_minhash_kernel(const int* X_indices, const int* X_indptr, const uint32_t* A,
-                                       const uint32_t* B, int n_samples, int n_hash_tables,
-                                       int n_hashes, uint32_t* X_sig) {
+__global__ void compute_minhash_kernel(const int* __restrict__ X_indices,
+                                       const int* __restrict__ X_indptr,
+                                       const uint32_t* __restrict__ A,
+                                       const uint32_t* __restrict__ B, int n_samples,
+                                       int n_hash_tables, int n_hashes,
+                                       uint32_t* __restrict__ X_sig) {
     int total_hashes = n_hashes * n_hash_tables;
     // Kernel is launched in 2D block of (row, hash fn)
     // Each block handles 1 row (1 thread per element) and HASH_TILE hash functions

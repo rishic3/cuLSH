@@ -21,8 +21,9 @@ namespace detail {
  * @param[out] X_sig Compressed output signatures (n_hash_tables x n_samples x n_hashes)
  */
 template <typename DType>
-__global__ void compute_signatures_kernel(const DType* X_hash, int n_samples, int n_hash_tables,
-                                          int n_hashes, uint8_t* X_sig) {
+__global__ void compute_signatures_kernel(const DType* __restrict__ X_hash, int n_samples,
+                                          int n_hash_tables, int n_hashes,
+                                          uint8_t* __restrict__ X_sig) {
 
     // each thread computes one signature
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;

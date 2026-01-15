@@ -26,9 +26,10 @@ namespace detail {
  * @param[in] byte_idx Index of byte to extract
  * @param[out] d_keys Device pointer to array of keys
  */
-static __global__ void extract_byte_key_kernel(const uint8_t* X_sig, const uint32_t* item_indices,
+static __global__ void extract_byte_key_kernel(const uint8_t* __restrict__ X_sig,
+                                               const uint32_t* __restrict__ item_indices,
                                                int n_samples, int n_hash_tables, int sig_nbytes,
-                                               int byte_idx, uint8_t* d_keys) {
+                                               int byte_idx, uint8_t* __restrict__ d_keys) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     size_t n_items = static_cast<size_t>(n_samples) * n_hash_tables;
     if (idx >= n_items)
@@ -55,8 +56,9 @@ static __global__ void extract_byte_key_kernel(const uint8_t* X_sig, const uint3
  * @param[in] n_items Number of items (n_samples * n_hash_tables)
  * @param[out] d_keys Device pointer to array of keys
  */
-static __global__ void extract_table_id_key_kernel(const uint32_t* item_indices, int n_samples,
-                                                   size_t n_items, uint8_t* d_keys) {
+static __global__ void extract_table_id_key_kernel(const uint32_t* __restrict__ item_indices,
+                                                   int n_samples, size_t n_items,
+                                                   uint8_t* __restrict__ d_keys) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_items)
         return;
@@ -72,8 +74,8 @@ static __global__ void extract_table_id_key_kernel(const uint32_t* item_indices,
  * @param[in] sig_nbytes Signature width in bytes
  * @return True if signatures are equal, false otherwise
  */
-static __device__ bool are_signatures_equal(const uint8_t* sig1, const uint8_t* sig2,
-                                            int sig_nbytes) {
+static __device__ bool are_signatures_equal(const uint8_t* __restrict__ sig1,
+                                            const uint8_t* __restrict__ sig2, int sig_nbytes) {
     for (int i = 0; i < sig_nbytes; ++i) {
         if (sig1[i] != sig2[i])
             return false;
@@ -92,10 +94,11 @@ static __device__ bool are_signatures_equal(const uint8_t* sig1, const uint8_t* 
  * @param[out] d_bucket_flags Device pointer to array of bucket flags
  * @param[out] d_table_flags Device pointer to array of table flags
  */
-static __global__ void mark_boundaries_kernel(const uint8_t* X_sig,
-                                              const uint32_t* sorted_item_indices, int n_samples,
-                                              int n_hash_tables, int sig_nbytes, size_t n_items,
-                                              int* d_bucket_flags, int* d_table_flags) {
+static __global__ void mark_boundaries_kernel(const uint8_t* __restrict__ X_sig,
+                                              const uint32_t* __restrict__ sorted_item_indices,
+                                              int n_samples, int n_hash_tables, int sig_nbytes,
+                                              size_t n_items, int* __restrict__ d_bucket_flags,
+                                              int* __restrict__ d_table_flags) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_items)
         return;
@@ -154,13 +157,12 @@ static __global__ void mark_boundaries_kernel(const uint8_t* X_sig,
  * @param[out] d_all_candidates Device pointer to array of all candidate indices
  * @param[out] d_item_to_bucket Optional device pointer containing (row,table) -> bucket_id mapping
  */
-static __global__ void build_final_index_kernel(const uint8_t* X_sig,
-                                                const uint32_t* sorted_item_indices,
-                                                const int* d_bucket_flags, const int* d_bucket_scan,
-                                                int n_samples, int n_hash_tables, int sig_nbytes,
-                                                size_t n_items, uint8_t* d_bucket_signatures,
-                                                int* d_bucket_candidate_offsets,
-                                                int* d_all_candidates, int* d_item_to_bucket) {
+static __global__ void build_final_index_kernel(
+    const uint8_t* __restrict__ X_sig, const uint32_t* __restrict__ sorted_item_indices,
+    const int* __restrict__ d_bucket_flags, const int* __restrict__ d_bucket_scan, int n_samples,
+    int n_hash_tables, int sig_nbytes, size_t n_items, uint8_t* __restrict__ d_bucket_signatures,
+    int* __restrict__ d_bucket_candidate_offsets, int* __restrict__ d_all_candidates,
+    int* __restrict__ d_item_to_bucket) {
 
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= n_items)
@@ -341,8 +343,9 @@ inline Index fit_index(cudaStream_t stream, const void* X_sig, int n_samples, in
     CUDA_CHECK(
         cudaMalloc(&index.bucket_candidate_offsets, (index.n_total_buckets + 1) * sizeof(int)));
     // Allocate all_bucket_signatures - signature for all buckets in sorted order
-    CUDA_CHECK_ALLOC(cudaMalloc(&index.all_bucket_signatures, static_cast<size_t>(index.n_total_buckets) *
-                                                            sig_nbytes * sizeof(uint8_t)));
+    CUDA_CHECK_ALLOC(
+        cudaMalloc(&index.all_bucket_signatures,
+                   static_cast<size_t>(index.n_total_buckets) * sig_nbytes * sizeof(uint8_t)));
 
     // Set terminating values in offset arrays
     int n_items_int = static_cast<int>(n_items);

@@ -127,8 +127,9 @@ int main(int argc, char* argv[]) {
     // Copy data to GPU
     float* X_gpu;
     float* Q_gpu;
-    CUDA_CHECK_ALLOC(cudaMalloc(&X_gpu, static_cast<size_t>(n_samples) * n_features * sizeof(float)));
-    CUDA_CHECK(
+    CUDA_CHECK_ALLOC(
+        cudaMalloc(&X_gpu, static_cast<size_t>(n_samples) * n_features * sizeof(float)));
+    CUDA_CHECK_ALLOC(
         cudaMalloc(&Q_gpu, static_cast<size_t>(n_test_queries) * n_features * sizeof(float)));
     CUDA_CHECK(cudaMemcpy(X_gpu, X, static_cast<size_t>(n_samples) * n_features * sizeof(float),
                           cudaMemcpyHostToDevice));
