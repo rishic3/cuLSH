@@ -39,7 +39,7 @@ inline Candidates fit_query(cudaStream_t stream, const void* X_sig, int n_sample
     // query_from_matched_buckets.
 
     int* d_item_to_bucket;
-    CUDA_CHECK(cudaMalloc(&d_item_to_bucket, n_items * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_item_to_bucket, n_items * sizeof(int)));
 
     // Build the index and fill d_item_to_bucket during final scatter
     Index index =

@@ -115,7 +115,7 @@ void hash(cublasHandle_t cublas_handle, cudaStream_t stream, const DType* X, con
     // Allocate intermediate hash buffer
     size_t hash_size = static_cast<size_t>(n_samples) * n_total_buckets;
     DType* X_hash = nullptr;
-    CUDA_CHECK(cudaMalloc(&X_hash, hash_size * sizeof(DType)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&X_hash, hash_size * sizeof(DType)));
 
     // hash(x) = floor((P * x + b) / W) for each sample x in X.
     // Input P and bias b are assumed to be pre-normalized by window size W.

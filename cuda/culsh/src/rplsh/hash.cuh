@@ -101,7 +101,7 @@ void hash(cublasHandle_t cublas_handle, cudaStream_t stream, const DType* X, con
     // Allocate intermediate hash buffer
     size_t hash_size = static_cast<size_t>(n_samples) * n_total_buckets;
     DType* X_hash = nullptr;
-    CUDA_CHECK(cudaMalloc(&X_hash, hash_size * sizeof(DType)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&X_hash, hash_size * sizeof(DType)));
 
     // Given row-major X, P, compute X * P^T = X_hash.
     // In col-major (used by cuBLAS - denoting with _c), we have X_c = X^T, P_c = P^T.

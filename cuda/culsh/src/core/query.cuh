@@ -296,7 +296,7 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
 
     // Count total number of candidates for each (query, table)
     int* d_candidate_counts = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_candidate_counts, n_items * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_candidate_counts, n_items * sizeof(int)));
     count_candidates_kernel<<<grid_size_items, block_size, 0, stream>>>(
         index->bucket_candidate_offsets, d_matched_bucket_indices, n_queries, n_hash_tables,
         d_candidate_counts);
@@ -304,8 +304,8 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
     // Initialize output candidates object
     Candidates candidates;
     candidates.n_queries = n_queries;
-    CUDA_CHECK(cudaMalloc(&candidates.query_candidate_counts, n_queries * sizeof(size_t)));
-    CUDA_CHECK(cudaMalloc(&candidates.query_candidate_offsets, (n_queries + 1) * sizeof(size_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&candidates.query_candidate_counts, n_queries * sizeof(size_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&candidates.query_candidate_offsets, (n_queries + 1) * sizeof(size_t)));
 
     // For each query, sum candidates across all tables
     aggregate_query_results_kernel<<<grid_size_queries, block_size, 0, stream>>>(
@@ -313,8 +313,8 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
 
     // Precompute per-(query, table) write offsets
     size_t* d_table_prefix_offsets = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_table_prefix_offsets,
-                          static_cast<size_t>(n_queries) * n_hash_tables * sizeof(size_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_table_prefix_offsets,
+                                static_cast<size_t>(n_queries) * n_hash_tables * sizeof(size_t)));
     compute_table_prefix_offsets_kernel<<<grid_size_queries, block_size, 0, stream>>>(
         d_candidate_counts, n_queries, n_hash_tables, d_table_prefix_offsets);
 
@@ -363,7 +363,7 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
 
     // Collect all candidates (each warp handles one (query, table) pair)
     int* d_raw_candidates = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_raw_candidates, total_raw_candidates * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_raw_candidates, total_raw_candidates * sizeof(int)));
 
     int warps_per_block = block_size.x >> 5;
     dim3 grid_size_pairs((n_items + warps_per_block - 1) / warps_per_block);
@@ -384,7 +384,7 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
     // 5. get total unique candidates
     // 6. compact unique candidates to final array
     int* d_sorted_candidates = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_sorted_candidates, total_raw_candidates * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_sorted_candidates, total_raw_candidates * sizeof(int)));
 
     // Sort the raw candidate indices per-query
     size_t sort_temp_bytes = 0;
@@ -401,7 +401,7 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
     // Mark unique candidate indices per query segment (global adjacent compare)
     // Then post-process to ensure the boundaries of each query's segment are marked
     int* d_flags = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_flags, total_raw_candidates * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_flags, total_raw_candidates * sizeof(int)));
     dim3 grid_size_total((total_raw_candidates + block_size.x - 1) / block_size.x);
     mark_unique_kernel<<<grid_size_total, block_size, 0, stream>>>(d_sorted_candidates,
                                                                    total_raw_candidates, d_flags);
@@ -450,7 +450,7 @@ inline Candidates query_from_matched_buckets(cudaStream_t stream,
             cudaMalloc(&candidates.query_candidate_indices, total_unique_candidates * sizeof(int)));
 
         int* d_num_selected_out = nullptr;
-        CUDA_CHECK(cudaMalloc(&d_num_selected_out, sizeof(int)));
+        CUDA_CHECK_ALLOC(cudaMalloc(&d_num_selected_out, sizeof(int)));
 
         size_t select_temp_bytes = 0;
         cub::DeviceSelect::Flagged(nullptr, select_temp_bytes, d_sorted_candidates, d_flags,
@@ -504,7 +504,7 @@ inline Candidates query_index(cudaStream_t stream, const void* Q_sig, int n_quer
 
     // Allocate array to store query matches
     int* d_matched_bucket_indices = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_matched_bucket_indices, n_items * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_matched_bucket_indices, n_items * sizeof(int)));
 
     // Find matching buckets for each (query, table)
     find_matching_buckets_kernel<<<grid_size_items, block_size, 0, stream>>>(

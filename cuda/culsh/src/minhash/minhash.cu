@@ -22,13 +22,13 @@ Index fit(cudaStream_t stream, const int* X_indices, const int* X_indptr, int n_
     int total_hashes = params.n_hash_tables * params.n_hashes;
     uint32_t* A = nullptr;
     uint32_t* B = nullptr;
-    CUDA_CHECK(cudaMalloc(&A, total_hashes * sizeof(uint32_t)));
-    CUDA_CHECK(cudaMalloc(&B, total_hashes * sizeof(uint32_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&A, total_hashes * sizeof(uint32_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&B, total_hashes * sizeof(uint32_t)));
     detail::generate_hash_integers(stream, total_hashes, params.seed, A, B);
 
     // Allocate X_sig
     uint32_t* X_sig = nullptr;
-    CUDA_CHECK(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
+    CUDA_CHECK_ALLOC(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
                                       params.n_hashes * sizeof(uint32_t)));
     detail::compute_minhash(stream, X_indices, X_indptr, A, B, n_samples, params.n_hash_tables,
                             params.n_hashes, X_sig);
@@ -57,7 +57,7 @@ Candidates query(cudaStream_t stream, const int* Q_indices, const int* Q_indptr,
 
     // Allocate Q_sig
     uint32_t* Q_sig = nullptr;
-    CUDA_CHECK(cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * n_hash_tables * n_hashes *
+    CUDA_CHECK_ALLOC(cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * n_hash_tables * n_hashes *
                                       sizeof(uint32_t)));
 
     // Compute minhash signatures
@@ -78,13 +78,13 @@ Candidates fit_query(cudaStream_t stream, const int* X_indices, const int* X_ind
     int total_hashes = params.n_hash_tables * params.n_hashes;
     uint32_t* A = nullptr;
     uint32_t* B = nullptr;
-    CUDA_CHECK(cudaMalloc(&A, total_hashes * sizeof(uint32_t)));
-    CUDA_CHECK(cudaMalloc(&B, total_hashes * sizeof(uint32_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&A, total_hashes * sizeof(uint32_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&B, total_hashes * sizeof(uint32_t)));
     detail::generate_hash_integers(stream, total_hashes, params.seed, A, B);
 
     // Allocate X_sig
     uint32_t* X_sig = nullptr;
-    CUDA_CHECK(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
+    CUDA_CHECK_ALLOC(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
                                       params.n_hashes * sizeof(uint32_t)));
     detail::compute_minhash(stream, X_indices, X_indptr, A, B, n_samples, params.n_hash_tables,
                             params.n_hashes, X_sig);

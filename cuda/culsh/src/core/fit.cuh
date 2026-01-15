@@ -240,13 +240,13 @@ inline Index fit_index(cudaStream_t stream, const void* X_sig, int n_samples, in
     int* d_bucket_flags = nullptr;
     int* d_table_flags = nullptr;
     int* d_bucket_scan = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_item_indices, n_items * sizeof(uint32_t)));
-    CUDA_CHECK(cudaMalloc(&d_temp_indices, n_items * sizeof(uint32_t)));
-    CUDA_CHECK(cudaMalloc(&d_keys, n_items * sizeof(uint8_t)));
-    CUDA_CHECK(cudaMalloc(&d_temp_keys, n_items * sizeof(uint8_t)));
-    CUDA_CHECK(cudaMalloc(&d_bucket_flags, n_items * sizeof(int)));
-    CUDA_CHECK(cudaMalloc(&d_table_flags, n_items * sizeof(int)));
-    CUDA_CHECK(cudaMalloc(&d_bucket_scan, n_items * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_item_indices, n_items * sizeof(uint32_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_temp_indices, n_items * sizeof(uint32_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_keys, n_items * sizeof(uint8_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_temp_keys, n_items * sizeof(uint8_t)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_bucket_flags, n_items * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_table_flags, n_items * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_bucket_scan, n_items * sizeof(int)));
 
     // Initialize sequence d_item_indices [0, 1, 2, ... n_items-1]
     thrust::sequence(thrust::cuda::par.on(stream), d_item_indices, d_item_indices + n_items, 0);
@@ -295,7 +295,7 @@ inline Index fit_index(cudaStream_t stream, const void* X_sig, int n_samples, in
     index.n_hashes = n_hashes;
     index.sig_nbytes = sig_nbytes;
     index.n_total_candidates = static_cast<int>(n_items);
-    CUDA_CHECK(cudaMalloc(&index.table_bucket_offsets, (n_hash_tables + 1) * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&index.table_bucket_offsets, (n_hash_tables + 1) * sizeof(int)));
 
     // Run exclusive sum to get bucket offsets from binary flags, e.g.
     // d_bucket_flags = [1, 0, 0, 1, 0, 0, 1, 0, ...]
@@ -308,7 +308,7 @@ inline Index fit_index(cudaStream_t stream, const void* X_sig, int n_samples, in
                                   n_items, stream);
 
     int* d_num_selected_out = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_num_selected_out, sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&d_num_selected_out, sizeof(int)));
 
     // Query memory requirements for select
     size_t select_temp_storage_bytes = 0;
@@ -335,13 +335,13 @@ inline Index fit_index(cudaStream_t stream, const void* X_sig, int n_samples, in
     index.n_total_buckets = last_bucket_idx_val + last_bucket_flag_val;
 
     // Allocate all_candidate_indices - original row idx for all items in sorted order
-    CUDA_CHECK(cudaMalloc(&index.all_candidate_indices, n_items * sizeof(int)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&index.all_candidate_indices, n_items * sizeof(int)));
     // Allocate bucket_candidate_offsets - start idx of each bucket's candidate indices in
     // all_candidate_indices
     CUDA_CHECK(
         cudaMalloc(&index.bucket_candidate_offsets, (index.n_total_buckets + 1) * sizeof(int)));
     // Allocate all_bucket_signatures - signature for all buckets in sorted order
-    CUDA_CHECK(cudaMalloc(&index.all_bucket_signatures, static_cast<size_t>(index.n_total_buckets) *
+    CUDA_CHECK_ALLOC(cudaMalloc(&index.all_bucket_signatures, static_cast<size_t>(index.n_total_buckets) *
                                                             sig_nbytes * sizeof(uint8_t)));
 
     // Set terminating values in offset arrays

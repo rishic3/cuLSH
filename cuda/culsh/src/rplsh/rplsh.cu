@@ -20,7 +20,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int
     // Allocate projection matrix
     size_t P_size = static_cast<size_t>(params.n_hash_tables) * params.n_hashes * n_features;
     float* P = nullptr;
-    CUDA_CHECK(cudaMalloc(&P, P_size * sizeof(float)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&P, P_size * sizeof(float)));
 
     // Generate random projections
     detail::generate_random_projections<float>(stream, params.n_hash_tables * params.n_hashes,
@@ -28,7 +28,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const float* X, int
 
     // Hash X to binary signatures
     uint8_t* X_sig = nullptr;
-    CUDA_CHECK(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
+    CUDA_CHECK_ALLOC(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
                                       params.n_hashes * sizeof(uint8_t)));
     detail::hash<float>(cublas_handle, stream, X, P, n_samples, n_features, params.n_hash_tables,
                         params.n_hashes, X_sig);
@@ -54,7 +54,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, in
     // Allocate projection matrix
     size_t P_size = static_cast<size_t>(params.n_hash_tables) * params.n_hashes * n_features;
     double* P = nullptr;
-    CUDA_CHECK(cudaMalloc(&P, P_size * sizeof(double)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&P, P_size * sizeof(double)));
 
     // Generate random projections
     detail::generate_random_projections<double>(stream, params.n_hash_tables * params.n_hashes,
@@ -62,7 +62,7 @@ Index fit(cublasHandle_t cublas_handle, cudaStream_t stream, const double* X, in
 
     // Hash X to binary signatures
     uint8_t* X_sig = nullptr;
-    CUDA_CHECK(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
+    CUDA_CHECK_ALLOC(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
                                       params.n_hashes * sizeof(uint8_t)));
     detail::hash<double>(cublas_handle, stream, X, P, n_samples, n_features, params.n_hash_tables,
                          params.n_hashes, X_sig);
@@ -92,7 +92,7 @@ Candidates query(cublasHandle_t cublas_handle, cudaStream_t stream, const float*
 
     // Hash Q to binary signatures
     uint8_t* Q_sig = nullptr;
-    CUDA_CHECK(cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * n_hash_tables * n_hashes *
+    CUDA_CHECK_ALLOC(cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * n_hash_tables * n_hashes *
                                       sizeof(uint8_t)));
     detail::hash<float>(cublas_handle, stream, Q, P, n_queries, n_features, n_hash_tables, n_hashes,
                         Q_sig);
@@ -114,7 +114,7 @@ Candidates query(cublasHandle_t cublas_handle, cudaStream_t stream, const double
 
     // Hash Q to binary signatures
     uint8_t* Q_sig = nullptr;
-    CUDA_CHECK(cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * n_hash_tables * n_hashes *
+    CUDA_CHECK_ALLOC(cudaMalloc(&Q_sig, static_cast<size_t>(n_queries) * n_hash_tables * n_hashes *
                                       sizeof(uint8_t)));
     detail::hash<double>(cublas_handle, stream, Q, P, n_queries, n_features, n_hash_tables,
                          n_hashes, Q_sig);
@@ -132,7 +132,7 @@ Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const fl
     // Allocate projection matrix
     size_t P_size = static_cast<size_t>(params.n_hash_tables) * params.n_hashes * n_features;
     float* P = nullptr;
-    CUDA_CHECK(cudaMalloc(&P, P_size * sizeof(float)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&P, P_size * sizeof(float)));
 
     // Generate random projections
     detail::generate_random_projections<float>(stream, params.n_hash_tables * params.n_hashes,
@@ -140,7 +140,7 @@ Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const fl
 
     // Hash X to binary signatures
     uint8_t* X_sig = nullptr;
-    CUDA_CHECK(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
+    CUDA_CHECK_ALLOC(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
                                       params.n_hashes * sizeof(uint8_t)));
     detail::hash<float>(cublas_handle, stream, X, P, n_samples, n_features, params.n_hash_tables,
                         params.n_hashes, X_sig);
@@ -161,7 +161,7 @@ Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const do
     // Allocate projection matrix
     size_t P_size = static_cast<size_t>(params.n_hash_tables) * params.n_hashes * n_features;
     double* P = nullptr;
-    CUDA_CHECK(cudaMalloc(&P, P_size * sizeof(double)));
+    CUDA_CHECK_ALLOC(cudaMalloc(&P, P_size * sizeof(double)));
 
     // Generate random projections
     detail::generate_random_projections<double>(stream, params.n_hash_tables * params.n_hashes,
@@ -169,7 +169,7 @@ Candidates fit_query(cublasHandle_t cublas_handle, cudaStream_t stream, const do
 
     // Hash X to binary signatures
     uint8_t* X_sig = nullptr;
-    CUDA_CHECK(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
+    CUDA_CHECK_ALLOC(cudaMalloc(&X_sig, static_cast<size_t>(n_samples) * params.n_hash_tables *
                                       params.n_hashes * sizeof(uint8_t)));
     detail::hash<double>(cublas_handle, stream, X, P, n_samples, n_features, params.n_hash_tables,
                          params.n_hashes, X_sig);

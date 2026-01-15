@@ -6,6 +6,17 @@
 #include <cuda_runtime.h>
 #include <curand.h>
 
+// Always check cudaMalloc calls. These are synchronous anyway so it's fine.
+#define CUDA_CHECK_ALLOC(call)                                                                     \
+    do {                                                                                           \
+        cudaError_t error = call;                                                                  \
+        if (error != cudaSuccess) {                                                                \
+            fprintf(stderr, "CUDA allocation error at %s:%d - %s\n", __FILE__, __LINE__,           \
+                    cudaGetErrorString(error));                                                    \
+            exit(1);                                                                               \
+        }                                                                                          \
+    } while (0)
+
 #ifndef NDEBUG
 #define CUDA_CHECK(call)                                                                           \
     do {                                                                                           \
@@ -61,7 +72,7 @@ inline void ensure_temp_storage(void** d_temp_storage, size_t& current_bytes,
         if (*d_temp_storage != nullptr) {
             CUDA_CHECK(cudaFree(*d_temp_storage));
         }
-        CUDA_CHECK(cudaMalloc(d_temp_storage, required_bytes));
+        CUDA_CHECK_ALLOC(cudaMalloc(d_temp_storage, required_bytes));
         current_bytes = required_bytes;
     }
 }
