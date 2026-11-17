@@ -1,0 +1,94 @@
+name: GPU tests (simulated)
+
+# Optional, non-required check. The runners have no GPU, so this builds the
+# CUDA library and runs the recall benchmark on a simulated NVIDIA H100
+# (https://github.com/pantheongpu/pantheonsim). A simulator cannot reproduce
+# hardware-specific behaviour or timing, so it complements real-GPU testing and
+# does not replace it.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "cuda/**"
+      - ".github/workflows/gpu-sim.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpu-sim-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gpu-tests:
+    name: RPLSH recall on a simulated H100
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      # CUDA 12.6 rather than 13: the sources use cub::Min, removed in CUDA 13.
+      - name: Set up the simulated GPU and CUDA toolkit
+        uses: pantheongpu/setup-pantheonsim@deff5781e8adfd83dec98dd5242dcbc96a564773 # v0.1.10
+        with:
+          gpu: nvidia/h100
+          cuda-toolkit: "12.6"
+
+      # 90-virtual embeds PTX only (the simulator JIT-compiles PTX) and the
+      # shared CUDA runtime is required by the simulator.
+      - name: Configure
+        run: |
+          cmake -S cuda -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CUDA_ARCHITECTURES=90-virtual \
+            -DCMAKE_CUDA_RUNTIME_LIBRARY=Shared
+
+      - name: Build
+        run: vgpu run --preload cmake --build build -j3
+
+      # The benchmark reads SIFT-format .fvecs files, so generate a small
+      # clustered set of the same shape (128 dims) instead of downloading SIFT.
+      - name: Generate data
+        run: |
+          python3 - <<'PY'
+          import os, random, struct
+          random.seed(0)
+          d = 128
+          centers = [[random.gauss(0, 10) for _ in range(d)] for _ in range(20)]
+          X = [[c + random.gauss(0, 1) for c in random.choice(centers)] for _ in range(2000)]
+          Q = [[v + random.gauss(0, 0.1) for v in x] for x in X[:100]]
+          def write(path, rows):
+              with open(path, "wb") as f:
+                  for r in rows:
+                      f.write(struct.pack("<i", d) + struct.pack("<%df" % d, *r))
+          os.makedirs("data", exist_ok=True)
+          write("data/sift_base.fvecs", X)
+          write("data/sift_query.fvecs", Q)
+          PY
+
+      # The benchmark fits RPLSH on the GPU, queries it, and compares the
+      # candidates with a brute-force cosine search on the CPU. The job fails
+      # on a device error, if some queries get no candidates, or if the recall
+      # is far below what the algorithm gives on this data.
+      - name: Run benchmark
+        run: |
+          set -o pipefail
+          vgpu run build/benchmark -d data -o results -t 8 -h 16 -s 1 -q 50 2>&1 | tee bench.log
+          if grep -Eqi "VirtualGPU error|no CUDA-capable device|no device" bench.log; then
+            echo "device error in the output"; exit 1
+          fi
+          grep -q "Using GPU: NVIDIA H100" bench.log
+          python3 - <<'PY'
+          import re
+          m = re.search(r"Average recall: ([0-9.]+) \((\d+)/(\d+) queries", open("bench.log").read())
+          recall, got, total = float(m[1]), int(m[2]), int(m[3])
+          print("recall", recall, "queries with candidates", got, "of", total)
+          cands = [int(c) for c in re.findall(r"candidates=(\d+)", open("bench.log").read())]
+          print("mean candidates", sum(cands) / len(cands), "of 2000 points")
+          assert got == total, "some queries returned no candidates"
+          assert sum(cands) / len(cands) < 500, "candidate sets are not selective"
+          assert recall > 0.9, "recall too low"
+          PY
